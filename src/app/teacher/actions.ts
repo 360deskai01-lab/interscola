@@ -7,6 +7,8 @@ import {
   loadStudentAnalyticsData,
   type StudentAnalyticsData,
 } from '@/lib/student-analytics';
+import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
+import { loadStudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
@@ -692,6 +694,107 @@ export async function getStudentAnalyticsForTeacherFormAction(
   data?: StudentAnalyticsData;
 }> {
   const result = await getStudentAnalyticsForTeacherAction(studentId);
+  return {
+    success: result.success,
+    error: result.error,
+    data: result.data,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Öğrenci kariyer & yetkinlik özeti (Kariyer Pusulası)
+// ---------------------------------------------------------------------------
+
+export type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
+
+async function verifyTeacherStudentLink(
+  teacherId: string,
+  studentId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const trimmed = studentId.trim();
+  if (!STUDENT_UUID_PATTERN.test(trimmed)) {
+    return { ok: false, error: 'Geçersiz öğrenci kimliği.' };
+  }
+
+  const client = await getProfilesClient();
+  if (!client) {
+    return { ok: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+  }
+
+  const { data: link, error: linkError } = await client
+    .from('student_teachers')
+    .select('id')
+    .eq('teacher_id', teacherId)
+    .eq('student_id', trimmed)
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (linkError) {
+    console.error('[teacher] Kariyer bağlantı doğrulanamadı:', linkError.message);
+    return { ok: false, error: 'Öğrenci bağlantısı doğrulanamadı.' };
+  }
+
+  if (!link) {
+    return {
+      ok: false,
+      error: 'Bu öğrenci ile aktif bir bağlantınız yok.',
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function getStudentCareerInsightForTeacherAction(
+  studentId: string,
+  studentName?: string,
+): Promise<TeacherActionResult<StudentCareerInsightForTeacher>> {
+  try {
+    const teacher = await requireApprovedTeacher();
+    if (!teacher) {
+      return {
+        success: false,
+        error: 'Bu veri için onaylı bir öğretmen hesabı gerekiyor.',
+      };
+    }
+
+    const link = await verifyTeacherStudentLink(teacher.id, studentId);
+    if (!link.ok) {
+      return { success: false, error: link.error };
+    }
+
+    const client = await getProfilesClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const data = await loadStudentCareerInsightForTeacher(
+      client,
+      studentId.trim(),
+      studentName,
+    );
+
+    return { success: true, data };
+  } catch (error) {
+    console.error(
+      '[teacher] getStudentCareerInsightForTeacherAction:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Kariyer özeti yüklenemedi.' };
+  }
+}
+
+export async function getStudentCareerInsightForTeacherFormAction(
+  studentId: string,
+  studentName?: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  data?: StudentCareerInsightForTeacher;
+}> {
+  const result = await getStudentCareerInsightForTeacherAction(
+    studentId,
+    studentName,
+  );
   return {
     success: result.success,
     error: result.error,

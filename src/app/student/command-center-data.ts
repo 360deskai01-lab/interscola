@@ -4,6 +4,8 @@ import {
   loadOfficialExamAttemptsForStudent,
   scoresFromOfficialAttempts,
 } from '@/lib/student-command-center/official-attempts';
+import { loadStudentCareerSnapshot } from '@/lib/student-dashboard/load-career-assessment';
+import { buildUniversityThresholdProgressList } from '@/lib/student-dashboard/university-threshold-progress';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 import {
   getStudentProfileDbClient,
@@ -94,6 +96,18 @@ export async function getStudentCommandCenterDataAction(): Promise<{
     const { recentScores, matchScores } =
       scoresFromOfficialAttempts(officialAttemptRows);
 
+    const [careerBase, universityThresholds] = await Promise.all([
+      loadStudentCareerSnapshot(client, userId),
+      Promise.resolve(
+        buildUniversityThresholdProgressList(pinnedUniversities, matchScores),
+      ),
+    ]);
+
+    const career = {
+      ...careerBase,
+      pinnedUniversityNames: pinnedUniversities.map((u) => u.name),
+    };
+
     return {
       success: true,
       data: {
@@ -101,6 +115,8 @@ export async function getStudentCommandCenterDataAction(): Promise<{
         pinnedUniversities,
         recentScores,
         matchScores,
+        career,
+        universityThresholds,
       },
     };
   } catch (error) {

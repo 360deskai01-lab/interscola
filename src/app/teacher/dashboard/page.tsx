@@ -14,6 +14,7 @@ import {
   createInviteFormAction,
   getTeacherOrganizationContextAction,
   getStudentAnalyticsForTeacherFormAction,
+  getStudentCareerInsightForTeacherFormAction,
   getTeacherStudentsAction,
   removeStudentFormAction,
 } from '../actions';
@@ -194,6 +195,7 @@ export default async function TeacherDashboardPage(): Promise<ReactNode> {
           onMarkMessagesRead={markMessagesAsReadFormAction}
           unreadByAssignment={unreadByAssignment}
           onLoadStudentAnalytics={getStudentAnalyticsForTeacherFormAction}
+          onLoadStudentCareerInsight={getStudentCareerInsightForTeacherFormAction}
         />
 
         <p className="mt-8 text-center text-xs text-slate-600">

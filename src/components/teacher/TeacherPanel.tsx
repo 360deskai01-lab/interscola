@@ -39,6 +39,11 @@ import {
   TeacherStudentAnalyticsModal,
   type TeacherAnalyticsStudentTarget,
 } from '@/components/teacher/TeacherStudentAnalyticsModal';
+import {
+  TeacherStudentCareerInsightModal,
+  type TeacherCareerInsightTarget,
+} from '@/components/teacher/TeacherStudentCareerInsightModal';
+import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 
 type PanelTab = 'students' | 'library' | 'progress';
 
@@ -95,6 +100,14 @@ interface TeacherPanelProps {
     error?: string;
     data?: StudentAnalyticsData;
   }>;
+  onLoadStudentCareerInsight: (
+    studentId: string,
+    studentName: string,
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: StudentCareerInsightForTeacher;
+  }>;
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -135,6 +148,7 @@ export function TeacherPanel({
   onMarkMessagesRead,
   unreadByAssignment,
   onLoadStudentAnalytics,
+  onLoadStudentCareerInsight,
 }: TeacherPanelProps): ReactNode {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<PanelTab>('students');
@@ -142,6 +156,8 @@ export function TeacherPanel({
     useState<MessageThreadTarget | null>(null);
   const [analyticsTarget, setAnalyticsTarget] =
     useState<TeacherAnalyticsStudentTarget | null>(null);
+  const [careerInsightTarget, setCareerInsightTarget] =
+    useState<TeacherCareerInsightTarget | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [freshCode, setFreshCode] = useState<string | null>(null);
@@ -450,6 +466,19 @@ export function TeacherPanel({
                         <button
                           type="button"
                           onClick={() =>
+                            setCareerInsightTarget({
+                              studentId: student.studentId,
+                              fullName: student.fullName,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 rounded-md border border-violet-400/40 bg-violet-500/12 px-2.5 py-1 text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/22"
+                        >
+                          <span aria-hidden>🎯</span>
+                          Yetkinlik & Kariyer
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
                             setAnalyticsTarget({
                               studentId: student.studentId,
                               fullName: student.fullName,
@@ -500,6 +529,12 @@ export function TeacherPanel({
         target={analyticsTarget}
         onClose={() => setAnalyticsTarget(null)}
         onLoadAnalytics={onLoadStudentAnalytics}
+      />
+
+      <TeacherStudentCareerInsightModal
+        target={careerInsightTarget}
+        onClose={() => setCareerInsightTarget(null)}
+        onLoadInsight={onLoadStudentCareerInsight}
       />
     </div>
   );

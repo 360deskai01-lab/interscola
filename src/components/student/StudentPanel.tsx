@@ -46,7 +46,7 @@ import type {
   UpdateStudentGoalsPayload,
 } from '@/lib/student-profile/types';
 import { StudentGoalsModal } from '@/components/student/StudentGoalsModal';
-import { StudentCommandCenter } from '@/components/student/StudentCommandCenter';
+import { StudentCareerAcademicCockpit } from '@/components/student/StudentCareerAcademicCockpit';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 
 interface ConnectClaimResult {
@@ -396,7 +396,7 @@ export function StudentPanel({
         }}
       />
 
-      <StudentCommandCenter data={commandCenter} />
+      <StudentCareerAcademicCockpit data={commandCenter} />
 
       {/* Bildirimler */}
       <AnimatePresence mode="wait">

@@ -105,6 +105,14 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     pinnedUniversities: [],
     recentScores: { satScore: null, ieltsBand: null },
     matchScores: { satScore: null, ieltsBand: null, caieGrade: null },
+    career: {
+      hasAssessment: false,
+      topTraits: [],
+      radarData: [],
+      suggestedMajors: [],
+      pinnedUniversityNames: [],
+    },
+    universityThresholds: [],
   };
   const commandCenter = commandCenterResult.data ?? emptyCommandCenter;
   const goalsContext = commandCenter.goals;
