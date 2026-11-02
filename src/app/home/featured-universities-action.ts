@@ -105,10 +105,20 @@ export async function getFeaturedUniversitiesForHomeAction(): Promise<{
     );
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from('target_universities')
     .select(TARGET_UNIVERSITY_SELECT)
+    .eq('status', 'published')
     .order('name', { ascending: true });
+
+  if (error?.code === '42703') {
+    const legacy = await client
+      .from('target_universities')
+      .select(TARGET_UNIVERSITY_SELECT)
+      .order('name', { ascending: true });
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error) {
     console.error(

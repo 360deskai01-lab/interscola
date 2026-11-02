@@ -45,6 +45,7 @@ export async function getTargetUniversitiesAction(filters?: {
     let query = client
       .from('target_universities')
       .select(TARGET_UNIVERSITY_SELECT)
+      .eq('status', 'published')
       .order('name', { ascending: true });
 
     const country = filters?.country?.trim();
@@ -57,7 +58,25 @@ export async function getTargetUniversitiesAction(filters?: {
       query = query.or(`name.ilike.%${search}%,city.ilike.%${search}%`);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    if (error?.code === '42703') {
+      let legacyQuery = client
+        .from('target_universities')
+        .select(TARGET_UNIVERSITY_SELECT)
+        .order('name', { ascending: true });
+      if (country && country !== 'ALL' && country !== 'Tümü') {
+        legacyQuery = legacyQuery.eq('country', country);
+      }
+      if (search) {
+        legacyQuery = legacyQuery.or(
+          `name.ilike.%${search}%,city.ilike.%${search}%`,
+        );
+      }
+      const legacy = await legacyQuery;
+      data = legacy.data;
+      error = legacy.error;
+    }
 
     if (error) {
       console.error(

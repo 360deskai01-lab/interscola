@@ -38,10 +38,20 @@ export async function listTargetUniversitySeoEntries(): Promise<
     return [];
   }
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from('target_universities')
     .select('slug, created_at')
+    .eq('status', 'published')
     .order('name', { ascending: true });
+
+  if (error?.code === '42703') {
+    const legacy = await client
+      .from('target_universities')
+      .select('slug, created_at')
+      .order('name', { ascending: true });
+    data = legacy.data;
+    error = legacy.error;
+  }
 
   if (error) {
     console.error('[universities-seo] slug listesi okunamadı:', error.message);

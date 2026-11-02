@@ -13,6 +13,7 @@ import {
   Building2,
   ImageIcon,
   Loader2,
+  Pencil,
   Sparkles,
   Upload,
   X,
@@ -22,7 +23,10 @@ import type {
   AdminUniversitiesSummary,
   AdminUniversityRow,
   BulkUniversityImportRow,
+  UniversityPublicationStatus,
+  UniversityUpsertInput,
 } from '@/lib/universities/admin-types';
+import { parseJsonUniversityImports } from '@/lib/universities/import-parse';
 
 const SAMPLE_CSV = `name,country,city,minSat,minIelts,minAlevel,websiteUrl
 Bocconi University,İtalya,Milano,1450,7.0,AAB,https://www.unibocconi.eu
@@ -38,6 +42,13 @@ interface UniversityManagementSectionProps {
   onBulkImport: (
     rows: BulkUniversityImportRow[],
   ) => Promise<{ success: boolean; error?: string; imported?: number }>;
+  onUpdateStatus: (
+    id: string,
+    status: UniversityPublicationStatus,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onUpsertUniversity: (
+    input: UniversityUpsertInput,
+  ) => Promise<{ success: boolean; error?: string }>;
 }
 
 function parseCsvLine(line: string): string[] {
@@ -83,6 +94,8 @@ function parseCsvToRows(text: string): BulkUniversityImportRow[] {
   const ieltsIdx = indexOf(['minielts', 'min_ielts', 'ielts']);
   const alevelIdx = indexOf(['minalevel', 'min_alevel', 'alevel']);
   const webIdx = indexOf(['websiteurl', 'website', 'url']);
+  const slugIdx = indexOf(['slug']);
+  const statusIdx = indexOf(['status', 'durum']);
 
   return dataLines.map((line) => {
     const cells = parseCsvLine(line);
@@ -92,14 +105,25 @@ function parseCsvToRows(text: string): BulkUniversityImportRow[] {
     const minSatRaw = pick(satIdx);
     const minIeltsRaw = pick(ieltsIdx);
 
+    const statusRaw = pick(statusIdx).toLowerCase();
+    let status: UniversityPublicationStatus | undefined;
+    if (statusRaw === 'draft' || statusRaw === 'taslak') status = 'draft';
+    else if (statusRaw === 'archived' || statusRaw === 'arşiv' || statusRaw === 'arsiv') {
+      status = 'archived';
+    } else if (statusRaw === 'published' || statusRaw === 'yayında' || statusRaw === 'yayinda') {
+      status = 'published';
+    }
+
     return {
       name: pick(nameIdx >= 0 ? nameIdx : 0),
       country: pick(countryIdx >= 0 ? countryIdx : 1),
       city: pick(cityIdx >= 0 ? cityIdx : 2),
+      slug: pick(slugIdx) || undefined,
       minSat: minSatRaw ? Number.parseInt(minSatRaw, 10) : undefined,
       minIelts: minIeltsRaw ? Number.parseFloat(minIeltsRaw) : undefined,
       minAlevel: pick(alevelIdx) || undefined,
       websiteUrl: pick(webIdx) || undefined,
+      status,
     };
   });
 }
@@ -165,23 +189,51 @@ function statusBadge(status: AdminUniversityRow['status']): ReactNode {
       </span>
     );
   }
+  if (status === 'archived') {
+    return (
+      <span className="rounded-full border border-slate-500/35 bg-slate-600/20 px-2.5 py-0.5 text-[11px] font-medium text-slate-400">
+        Arşiv
+      </span>
+    );
+  }
   return (
-    <span className="rounded-full border border-slate-500/35 bg-slate-500/15 px-2.5 py-0.5 text-[11px] font-medium text-slate-300">
+    <span className="rounded-full border border-amber-400/35 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-100">
       Taslak
     </span>
   );
 }
+
+const SAMPLE_JSON = `[
+  {
+    "name": "Bocconi University",
+    "slug": "bocconi-university",
+    "country": "İtalya",
+    "city": "Milano",
+    "min_sat_score": 1450,
+    "min_ielts_band": 7.0,
+    "status": "draft"
+  }
+]`;
 
 export function UniversityManagementSection({
   data,
   loadError,
   onToggleFeatured,
   onBulkImport,
+  onUpdateStatus,
+  onUpsertUniversity,
 }: UniversityManagementSectionProps): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [mediaPending, startMediaTransition] = useTransition();
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'csv' | 'json'>('csv');
+  const [jsonImportText, setJsonImportText] = useState('');
+  const [editUniversity, setEditUniversity] = useState<AdminUniversityRow | null>(
+    null,
+  );
+  const [editForm, setEditForm] = useState<UniversityUpsertInput | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [mediaUniversity, setMediaUniversity] = useState<AdminUniversityRow | null>(
     null,
   );
@@ -261,6 +313,19 @@ export function UniversityManagementSection({
     });
   }
 
+  function runBulkImport(rows: BulkUniversityImportRow[]) {
+    startTransition(async () => {
+      const result = await onBulkImport(rows);
+      if (!result.success) {
+        setImportError(result.error ?? 'İçe aktarma başarısız.');
+        return;
+      }
+      setImportSuccess(`${result.imported ?? rows.length} üniversite içe aktarıldı.`);
+      setImportOpen(false);
+      router.refresh();
+    });
+  }
+
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -270,19 +335,96 @@ export function UniversityManagementSection({
     setImportSuccess(null);
 
     const text = await file.text();
+    const isJson =
+      file.name.toLowerCase().endsWith('.json') ||
+      text.trimStart().startsWith('[') ||
+      text.trimStart().startsWith('{');
+
+    if (isJson) {
+      const parsed = parseJsonUniversityImports(text);
+      if (!parsed.ok) {
+        setImportError(parsed.error);
+        return;
+      }
+      runBulkImport(parsed.rows);
+      return;
+    }
+
     const rows = parseCsvToRows(text);
     if (rows.length === 0) {
       setImportError('CSV dosyasında veri satırı bulunamadı.');
       return;
     }
+    runBulkImport(rows);
+  }
 
+  function handleJsonImportSubmit() {
+    setImportError(null);
+    setImportSuccess(null);
+    const parsed = parseJsonUniversityImports(jsonImportText);
+    if (!parsed.ok) {
+      setImportError(parsed.error);
+      return;
+    }
+    runBulkImport(parsed.rows);
+  }
+
+  function openEditModal(u: AdminUniversityRow | null) {
+    if (!u) {
+      setEditUniversity(null);
+      setEditForm({
+        name: '',
+        country: '',
+        city: '',
+        status: 'draft',
+      });
+    } else {
+      setEditUniversity(u);
+      setEditForm({
+        id: u.id,
+        name: u.name,
+        country: u.country,
+        city: u.city ?? '',
+        slug: u.slug,
+        minSatScore: u.minSatScore,
+        minIeltsBand: u.minIeltsBand,
+        minAlevel: u.minAlevel,
+        websiteUrl: u.websiteUrl,
+        tuitionFeeRange: u.tuitionFeeRange,
+        status: u.status,
+      });
+    }
+    setEditError(null);
+  }
+
+  function closeEditModal() {
+    setEditUniversity(null);
+    setEditForm(null);
+    setEditError(null);
+  }
+
+  function handleSaveEdit() {
+    if (!editForm) return;
     startTransition(async () => {
-      const result = await onBulkImport(rows);
+      const result = await onUpsertUniversity(editForm);
       if (!result.success) {
-        setImportError(result.error ?? 'İçe aktarma başarısız.');
+        setEditError(result.error ?? 'Kayıt kaydedilemedi.');
         return;
       }
-      setImportSuccess(`${result.imported ?? rows.length} üniversite içe aktarıldı.`);
+      closeEditModal();
+      setImportSuccess('Üniversite kaydı güncellendi.');
+      router.refresh();
+    });
+  }
+
+  function handleStatusChange(u: AdminUniversityRow, status: UniversityPublicationStatus) {
+    if (u.status === status) return;
+    startTransition(async () => {
+      const result = await onUpdateStatus(u.id, status);
+      if (!result.success) {
+        setImportError(result.error ?? 'Durum güncellenemedi.');
+        return;
+      }
       router.refresh();
     });
   }
@@ -338,18 +480,28 @@ export function UniversityManagementSection({
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setImportOpen(true);
-            setImportError(null);
-            setImportSuccess(null);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-4 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25"
-        >
-          <Upload className="size-4" />
-          CSV ile Toplu Yükle
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => openEditModal(null)}
+            className="inline-flex items-center gap-2 rounded-xl border border-violet-400/35 bg-violet-500/15 px-4 py-2.5 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/25"
+          >
+            <Pencil className="size-4" />
+            Yeni Üniversite
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setImportOpen(true);
+              setImportError(null);
+              setImportSuccess(null);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-4 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25"
+          >
+            <Upload className="size-4" />
+            Toplu İçe Aktarım
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/40">
@@ -363,7 +515,7 @@ export function UniversityManagementSection({
               <th className="px-4 py-3 font-medium">Min A-Level</th>
               <th className="px-4 py-3 font-medium">Vitrin</th>
               <th className="px-4 py-3 font-medium">Durum</th>
-              <th className="px-4 py-3 font-medium">Görseller</th>
+              <th className="px-4 py-3 font-medium">Eylemler</th>
             </tr>
           </thead>
           <tbody>
@@ -417,15 +569,42 @@ export function UniversityManagementSection({
                   </td>
                   <td className="px-4 py-3">{statusBadge(u.status)}</td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => openMediaModal(u)}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/10 px-2.5 py-1.5 text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/20"
-                      title="Görselleri Düzenle"
-                    >
-                      <ImageIcon className="size-3.5" aria-hidden />
-                      Düzenle
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        aria-label={`${u.name} yayın durumu`}
+                        disabled={pending}
+                        value={u.status}
+                        onChange={(e) =>
+                          handleStatusChange(
+                            u,
+                            e.target.value as UniversityPublicationStatus,
+                          )
+                        }
+                        className="rounded-lg border border-white/10 bg-slate-950/80 px-2 py-1.5 text-[11px] text-slate-200 disabled:opacity-50"
+                      >
+                        <option value="draft">Taslak</option>
+                        <option value="published">Yayında</option>
+                        <option value="archived">Arşiv</option>
+                      </select>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => openEditModal(u)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-white/[0.06] disabled:opacity-50"
+                      >
+                        <Pencil className="size-3" aria-hidden />
+                        Düzenle
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openMediaModal(u)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-violet-400/35 bg-violet-500/10 px-2.5 py-1.5 text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/20"
+                        title="Görselleri Düzenle"
+                      >
+                        <ImageIcon className="size-3.5" aria-hidden />
+                        Medya
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -589,25 +768,245 @@ export function UniversityManagementSection({
               <X className="size-4" />
             </button>
             <h3 className="text-lg font-semibold text-slate-50">
-              CSV ile Toplu Yükle
+              Toplu İçe Aktarım (CSV / JSON)
             </h3>
             <p className="mt-2 text-sm text-slate-400">
-              İlk satır başlık olmalı. Aynı slug mükerrerinde kayıt güncellenir
-              (upsert).
+              Slug verilirse upsert anahtarı slug olur; yoksa adından üretilir.
             </p>
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/80 p-3 text-[11px] leading-relaxed text-slate-300">
-              {SAMPLE_CSV}
-            </pre>
-            <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-cyan-400/35 bg-cyan-500/10 px-4 py-8 text-sm text-cyan-100 transition hover:bg-cyan-500/15">
-              <Upload className="mb-2 size-6" />
-              CSV dosyası seç
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setImportMode('csv')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  importMode === 'csv'
+                    ? 'bg-cyan-500/25 text-cyan-100'
+                    : 'text-slate-400 hover:bg-white/5'
+                }`}
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => setImportMode('json')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  importMode === 'json'
+                    ? 'bg-cyan-500/25 text-cyan-100'
+                    : 'text-slate-400 hover:bg-white/5'
+                }`}
+              >
+                JSON
+              </button>
+            </div>
+            {importMode === 'csv' ? (
+              <>
+                <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/80 p-3 text-[11px] leading-relaxed text-slate-300">
+                  {SAMPLE_CSV}
+                </pre>
+                <label className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-cyan-400/35 bg-cyan-500/10 px-4 py-8 text-sm text-cyan-100 transition hover:bg-cyan-500/15">
+                  <Upload className="mb-2 size-6" />
+                  CSV veya JSON dosyası seç
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,.json,application/json"
+                    className="sr-only"
+                    onChange={(e) => void handleFileChange(e)}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <pre className="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-slate-950/80 p-3 text-[11px] leading-relaxed text-slate-300">
+                  {SAMPLE_JSON}
+                </pre>
+                <textarea
+                  value={jsonImportText}
+                  onChange={(e) => setJsonImportText(e.target.value)}
+                  rows={8}
+                  placeholder="JSON dizisi yapıştırın…"
+                  className="mt-4 w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 font-mono text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-cyan-400/50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={handleJsonImportSubmit}
+                  className="mt-4 w-full rounded-xl border border-cyan-400/40 bg-cyan-500/15 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/25 disabled:opacity-50"
+                >
+                  {pending ? (
+                    <Loader2 className="mx-auto size-4 animate-spin" />
+                  ) : (
+                    'JSON İçe Aktar'
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {editForm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="university-edit-dialog-title"
+        >
+          <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+            <button
+              type="button"
+              onClick={closeEditModal}
+              className="absolute top-4 right-4 grid size-8 place-items-center rounded-full text-slate-400 hover:bg-white/10"
+              aria-label="Kapat"
+            >
+              <X className="size-4" />
+            </button>
+            <h3
+              id="university-edit-dialog-title"
+              className="text-lg font-semibold text-slate-50"
+            >
+              {editUniversity ? 'Üniversite Düzenle' : 'Yeni Üniversite'}
+            </h3>
+            {editError ? (
+              <p className="mt-3 text-sm text-rose-300" role="alert">
+                {editError}
+              </p>
+            ) : null}
+            <div className="mt-4 space-y-3">
               <input
-                type="file"
-                accept=".csv,text/csv"
-                className="sr-only"
-                onChange={(e) => void handleFileChange(e)}
+                type="text"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm((f) => f && { ...f, name: e.target.value })
+                }
+                placeholder="Üniversite adı"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
               />
-            </label>
+              <input
+                type="text"
+                value={editForm.slug ?? ''}
+                onChange={(e) =>
+                  setEditForm((f) => f && { ...f, slug: e.target.value })
+                }
+                placeholder="Slug (opsiyonel)"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editForm.country}
+                  onChange={(e) =>
+                    setEditForm((f) => f && { ...f, country: e.target.value })
+                  }
+                  placeholder="Ülke"
+                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                />
+                <input
+                  type="text"
+                  value={editForm.city}
+                  onChange={(e) =>
+                    setEditForm((f) => f && { ...f, city: e.target.value })
+                  }
+                  placeholder="Şehir"
+                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  type="number"
+                  value={editForm.minSatScore ?? ''}
+                  onChange={(e) =>
+                    setEditForm((f) =>
+                      f
+                        ? {
+                            ...f,
+                            minSatScore: e.target.value
+                              ? Number.parseInt(e.target.value, 10)
+                              : null,
+                          }
+                        : f,
+                    )
+                  }
+                  placeholder="Min SAT"
+                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                />
+                <input
+                  type="number"
+                  step="0.5"
+                  value={editForm.minIeltsBand ?? ''}
+                  onChange={(e) =>
+                    setEditForm((f) =>
+                      f
+                        ? {
+                            ...f,
+                            minIeltsBand: e.target.value
+                              ? Number.parseFloat(e.target.value)
+                              : null,
+                          }
+                        : f,
+                    )
+                  }
+                  placeholder="Min IELTS"
+                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                />
+                <input
+                  type="text"
+                  value={editForm.minAlevel ?? ''}
+                  onChange={(e) =>
+                    setEditForm((f) =>
+                      f ? { ...f, minAlevel: e.target.value || null } : f,
+                    )
+                  }
+                  placeholder="A-Level"
+                  className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                />
+              </div>
+              <input
+                type="url"
+                value={editForm.websiteUrl ?? ''}
+                onChange={(e) =>
+                  setEditForm((f) =>
+                    f ? { ...f, websiteUrl: e.target.value || null } : f,
+                  )
+                }
+                placeholder="Web sitesi URL"
+                className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+              />
+              <select
+                value={editForm.status ?? 'draft'}
+                onChange={(e) =>
+                  setEditForm((f) =>
+                    f
+                      ? {
+                          ...f,
+                          status: e.target.value as UniversityPublicationStatus,
+                        }
+                      : f,
+                  )
+                }
+                className="w-full rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="draft">Taslak</option>
+                <option value="published">Yayında</option>
+                <option value="archived">Arşiv</option>
+              </select>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeEditModal}
+                disabled={pending}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300"
+              >
+                İptal
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={handleSaveEdit}
+                className="rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50"
+              >
+                Kaydet
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

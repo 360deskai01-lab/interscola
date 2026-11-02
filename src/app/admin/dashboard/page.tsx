@@ -34,6 +34,8 @@ import {
   bulkImportUniversitiesFormAction,
   getAdminUniversitiesAction,
   toggleUniversityFeaturedFormAction,
+  updateUniversityStatusFormAction,
+  upsertSingleUniversityFormAction,
 } from '../university-actions';
 import { getIntelligenceAlertsAction } from '../intelligence-actions';
 import { IntelligenceSection } from '@/components/admin/IntelligenceSection';
@@ -69,7 +71,7 @@ const STATUS_TABS: readonly {
   { id: 'approved', label: 'Onaylananlar' },
   { id: 'rejected', label: 'Reddedilenler' },
   { id: 'b2b', label: 'Kurumsal Lisanslar (B2B)' },
-  { id: 'universities', label: '🏛️ Üniversiteler' },
+  { id: 'universities', label: '🏛️ Üniversite & Müfredat Yönetimi' },
   { id: 'intelligence', label: '📡 Otonom İstihbarat' },
   { id: 'audit', label: '📋 Denetim & Sınav Günlüğü' },
 ];
@@ -480,6 +482,8 @@ export default async function AdminDashboardPage({
             }
             onToggleFeatured={toggleUniversityFeaturedFormAction}
             onBulkImport={bulkImportUniversitiesFormAction}
+            onUpdateStatus={updateUniversityStatusFormAction}
+            onUpsertUniversity={upsertSingleUniversityFormAction}
           />
         ) : activeFilter === 'intelligence' ? (
           <IntelligenceSection

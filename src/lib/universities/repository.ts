@@ -79,22 +79,42 @@ export async function fetchTargetUniversityBySlug(
   const client = getTargetUniversitiesClient();
   if (!client) return null;
 
-  const { data, error } = await client
+  const publishedQuery = await client
     .from('target_universities')
     .select(TARGET_UNIVERSITY_SELECT)
     .eq('slug', normalized)
+    .eq('status', 'published')
     .maybeSingle();
 
-  if (error || !data) {
-    if (error) {
+  if (publishedQuery.error?.code === '42703') {
+    const legacy = await client
+      .from('target_universities')
+      .select(TARGET_UNIVERSITY_SELECT)
+      .eq('slug', normalized)
+      .maybeSingle();
+    if (legacy.error || !legacy.data) {
+      if (legacy.error) {
+        console.error(
+          '[UNIVERSITY_BY_SLUG_ERROR]:',
+          formatSupabaseError(legacy.error),
+          { slug: normalized, select: TARGET_UNIVERSITY_SELECT },
+        );
+      }
+      return null;
+    }
+    return mapTargetUniversityRow(legacy.data as TargetUniversityRow);
+  }
+
+  if (publishedQuery.error || !publishedQuery.data) {
+    if (publishedQuery.error) {
       console.error(
         '[UNIVERSITY_BY_SLUG_ERROR]:',
-        formatSupabaseError(error),
+        formatSupabaseError(publishedQuery.error),
         { slug: normalized, select: TARGET_UNIVERSITY_SELECT },
       );
     }
     return null;
   }
 
-  return mapTargetUniversityRow(data as TargetUniversityRow);
+  return mapTargetUniversityRow(publishedQuery.data as TargetUniversityRow);
 }
