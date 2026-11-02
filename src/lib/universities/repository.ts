@@ -1,7 +1,7 @@
 import type { University } from '@/lib/universities/types';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { getSupabasePublicAnon } from '@/lib/supabase/public-anon';
 
 /**
  * `public.target_universities` — kolon adları DB ile birebir (min_sat_score / min_ielts_band).
@@ -63,10 +63,11 @@ export function mapTargetUniversityRow(row: TargetUniversityRow): University {
   };
 }
 
-async function getTargetUniversitiesClient() {
+/** Service role (build/Vercel) veya çerezsiz anon — `"use cache"` ile uyumlu. */
+function getTargetUniversitiesClient() {
   const admin = getSupabaseAdmin(PROFILES_SCHEMA);
   if (admin) return admin;
-  return getSupabaseServer(PROFILES_SCHEMA);
+  return getSupabasePublicAnon(PROFILES_SCHEMA);
 }
 
 export async function fetchTargetUniversityBySlug(
@@ -75,7 +76,7 @@ export async function fetchTargetUniversityBySlug(
   const normalized = slug.trim();
   if (!normalized) return null;
 
-  const client = await getTargetUniversitiesClient();
+  const client = getTargetUniversitiesClient();
   if (!client) return null;
 
   const { data, error } = await client
