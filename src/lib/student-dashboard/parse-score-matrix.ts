@@ -62,7 +62,7 @@ function parseDimensionRecord<T extends string>(
   return out;
 }
 
-/** DB `score_matrix` jsonb → tip güvenli matris (kısmi veride null). */
+/** DB `scores` / legacy `score_matrix` jsonb → tip güvenli matris (kısmi veride null). */
 export function parseAssessmentScoreMatrix(
   raw: unknown,
 ): AssessmentScoreMatrix | null {

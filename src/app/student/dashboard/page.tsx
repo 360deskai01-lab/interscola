@@ -109,6 +109,8 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
       hasAssessment: false,
       topTraits: [],
       radarData: [],
+      primaryMajors: [],
+      secondaryMajors: [],
       suggestedMajors: [],
       pinnedUniversityNames: [],
     },

@@ -1,16 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { suggestSampleMajors } from '@/lib/assessment/majors';
+import { suggestTieredMajors } from '@/lib/assessment/majors';
+import {
+  CAREER_ASSESSMENT_USER_SELECT,
+  normalizeCareerAssessmentRow,
+  type CareerAssessmentDbRow,
+} from '@/lib/student-dashboard/career-assessment-db';
+import { loadStudentCareerSnapshot } from '@/lib/student-dashboard/load-career-assessment';
 import {
   extractTopStrengthTraits,
   parseAssessmentScoreMatrix,
 } from '@/lib/student-dashboard/parse-score-matrix';
-import { loadStudentCareerSnapshot } from '@/lib/student-dashboard/load-career-assessment';
 import {
   loadStudentGoalsContext,
   parseUniversityIds,
 } from '@/lib/student-profile/load-context';
 import type { CognitiveKey } from '@/types/assessment';
+import type { SampleMajorSuggestion } from '@/lib/assessment/majors';
 
 const COGNITIVE_KEYS: CognitiveKey[] = [
   'analytical',
@@ -33,6 +39,8 @@ export interface StudentCareerInsightForTeacher {
   hollandTitle?: string;
   topTraits: string[];
   cognitiveHighlights: string[];
+  primaryMajors: SampleMajorSuggestion[];
+  secondaryMajors: SampleMajorSuggestion[];
   suggestedMajors: string[];
   targetUniversities: { id: string; name: string; country: string; city: string | null }[];
   aiInterpretation?: string | null;
@@ -49,6 +57,8 @@ export async function loadStudentCareerInsightForTeacher(
     studentName,
     topTraits: [],
     cognitiveHighlights: [],
+    primaryMajors: [],
+    secondaryMajors: [],
     suggestedMajors: [],
     targetUniversities: [],
   };
@@ -79,17 +89,31 @@ export async function loadStudentCareerInsightForTeacher(
   }
 
   const cognitiveHighlights: string[] = [];
-  const { data: rawRow } = await client
+  let rawRow: CareerAssessmentDbRow | null = null;
+
+  const live = await client
     .from('career_assessments')
-    .select('score_matrix')
+    .select(CAREER_ASSESSMENT_USER_SELECT)
     .eq('user_id', studentId)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const scores = parseAssessmentScoreMatrix(
-    (rawRow as { score_matrix?: unknown } | null)?.score_matrix,
-  );
+  rawRow = (live.data ?? null) as CareerAssessmentDbRow | null;
+
+  if (!rawRow && live.error?.code === '42703') {
+    const legacy = await client
+      .from('career_assessments')
+      .select('score_matrix')
+      .eq('user_id', studentId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    rawRow = (legacy.data ?? null) as CareerAssessmentDbRow | null;
+  }
+
+  const normalized = rawRow ? normalizeCareerAssessmentRow(rawRow) : null;
+  const scores = parseAssessmentScoreMatrix(normalized?.scoresRaw);
   if (scores) {
     const ranked = [...COGNITIVE_KEYS].sort(
       (a, b) => scores.cognitive[b].percent - scores.cognitive[a].percent,
@@ -99,9 +123,15 @@ export async function loadStudentCareerInsightForTeacher(
     }
   }
 
-  const majors = scores
-    ? suggestSampleMajors(scores.topRiasec).map((m) => m.title)
-    : career.suggestedMajors;
+  const tiered =
+    career.primaryMajors.length > 0
+      ? {
+          primaryMajors: career.primaryMajors,
+          secondaryMajors: career.secondaryMajors,
+        }
+      : scores
+        ? suggestTieredMajors(scores.topRiasec)
+        : { primaryMajors: [], secondaryMajors: [] };
 
   return {
     hasAssessment: true,
@@ -115,7 +145,12 @@ export async function loadStudentCareerInsightForTeacher(
           ? extractTopStrengthTraits(scores)
           : [],
     cognitiveHighlights,
-    suggestedMajors: majors,
+    primaryMajors: tiered.primaryMajors,
+    secondaryMajors: tiered.secondaryMajors,
+    suggestedMajors: [
+      ...tiered.primaryMajors,
+      ...tiered.secondaryMajors,
+    ].map((m) => m.title),
     targetUniversities,
     aiInterpretation: career.aiInterpretation,
     assessedAt: career.assessedAt,

@@ -172,14 +172,27 @@ export function TeacherStudentCareerInsightModal({
                     </div>
                   ) : null}
 
-                  {insight.suggestedMajors.length > 0 ? (
+                  {insight.primaryMajors.length > 0 ? (
                     <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        Uyumlu alan örnekleri
+                      <p className="text-xs font-medium text-emerald-300/90">
+                        🎯 Birincil eşleşmeler
                       </p>
                       <ul className="mt-2 space-y-1 text-sm text-slate-300">
-                        {insight.suggestedMajors.map((major) => (
-                          <li key={major}>• {major}</li>
+                        {insight.primaryMajors.map((major) => (
+                          <li key={major.title}>• {major.title}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {insight.secondaryMajors.length > 0 ? (
+                    <div>
+                      <p className="text-xs font-medium text-sky-300/90">
+                        🚀 Çapraz / alternatif alanlar
+                      </p>
+                      <ul className="mt-2 space-y-1 text-sm text-slate-300">
+                        {insight.secondaryMajors.map((major) => (
+                          <li key={major.title}>• {major.title}</li>
                         ))}
                       </ul>
                     </div>

@@ -2,12 +2,54 @@
 
 import { getSessionUser } from '@/lib/auth';
 import { generateCareerGuidanceReport } from '@/lib/assessment/ai-report';
+import { extractTopStrengthTraits } from '@/lib/student-dashboard/parse-score-matrix';
 import type {
   AssessmentAnswers,
   AssessmentKind,
   AssessmentScoreMatrix,
 } from '@/types/assessment';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
+
+function buildLiveInsertPayload(
+  payload: {
+    kind: AssessmentKind;
+    guestSessionId: string | null;
+    answers: AssessmentAnswers;
+    scores: AssessmentScoreMatrix;
+  },
+  userId: string | null,
+  guestId: string | null,
+) {
+  return {
+    assessment_type: payload.kind,
+    guest_session_id: userId ? null : guestId,
+    user_id: userId,
+    answers: payload.answers,
+    scores: payload.scores,
+    top_traits: extractTopStrengthTraits(payload.scores),
+    ai_interpretation: null as string | null,
+  };
+}
+
+function buildLegacyInsertPayload(
+  payload: {
+    kind: AssessmentKind;
+    guestSessionId: string | null;
+    answers: AssessmentAnswers;
+    scores: AssessmentScoreMatrix;
+  },
+  userId: string | null,
+  guestId: string | null,
+) {
+  return {
+    assessment_kind: payload.kind,
+    guest_session_id: userId ? null : guestId,
+    user_id: userId,
+    answers: payload.answers,
+    score_matrix: payload.scores,
+    holland_code: payload.scores.hollandCode,
+  };
+}
 
 export async function saveCareerAssessmentAction(payload: {
   kind: AssessmentKind;
@@ -30,18 +72,21 @@ export async function saveCareerAssessmentAction(payload: {
     };
   }
 
-  const { data, error } = await client
+  const userId = sessionUser?.id ?? null;
+
+  let { data, error } = await client
     .from('career_assessments')
-    .insert({
-      assessment_kind: payload.kind,
-      guest_session_id: sessionUser ? null : guestId,
-      user_id: sessionUser?.id ?? null,
-      answers: payload.answers,
-      score_matrix: payload.scores,
-      holland_code: payload.scores.hollandCode,
-    })
+    .insert(buildLiveInsertPayload(payload, userId, guestId))
     .select('id')
     .single();
+
+  if (error?.code === '42703') {
+    ({ data, error } = await client
+      .from('career_assessments')
+      .insert(buildLegacyInsertPayload(payload, userId, guestId))
+      .select('id')
+      .single());
+  }
 
   if (error) {
     if (error.code === '42P01') {
@@ -78,11 +123,19 @@ export async function generateDeepCareerReportAction(
   if (assessmentId) {
     const client = getSupabaseAdmin(PROFILES_SCHEMA);
     if (client) {
-      await client
+      const liveUpdate = await client
         .from('career_assessments')
-        .update({ ai_report: result.report })
+        .update({ ai_interpretation: result.report })
         .eq('id', assessmentId)
         .eq('user_id', sessionUser.id);
+
+      if (liveUpdate.error?.code === '42703') {
+        await client
+          .from('career_assessments')
+          .update({ ai_report: result.report })
+          .eq('id', assessmentId)
+          .eq('user_id', sessionUser.id);
+      }
     }
   }
 

@@ -1,36 +1,38 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { suggestTieredMajors } from '@/lib/assessment/majors';
 import { riasecRadarData } from '@/lib/assessment/scoring';
-import { suggestSampleMajors } from '@/lib/assessment/majors';
 import type { StudentCareerSnapshot } from '@/lib/student-command-center/types';
+import {
+  CAREER_ASSESSMENT_USER_SELECT,
+  normalizeAssessmentType,
+  normalizeCareerAssessmentRow,
+  type CareerAssessmentDbRow,
+} from '@/lib/student-dashboard/career-assessment-db';
 import {
   ASSESSMENT_KIND_PRIORITY,
   extractTopStrengthTraits,
-  isAssessmentKind,
   parseAssessmentScoreMatrix,
 } from '@/lib/student-dashboard/parse-score-matrix';
 import type { AssessmentKind } from '@/types/assessment';
 
-type CareerRow = {
-  assessment_kind: string;
-  score_matrix: unknown;
-  holland_code: string | null;
-  ai_report: string | null;
-  created_at: string;
-};
+const LEGACY_CAREER_ASSESSMENT_SELECT =
+  'id, assessment_kind, score_matrix, holland_code, ai_report, created_at';
 
-function pickPreferredAssessment(rows: CareerRow[]): CareerRow | null {
+function pickPreferredAssessment(
+  rows: CareerAssessmentDbRow[],
+): CareerAssessmentDbRow | null {
   if (rows.length === 0) return null;
 
   const sorted = [...rows].sort((a, b) => {
-    const pa = isAssessmentKind(a.assessment_kind)
-      ? ASSESSMENT_KIND_PRIORITY[a.assessment_kind]
-      : 0;
-    const pb = isAssessmentKind(b.assessment_kind)
-      ? ASSESSMENT_KIND_PRIORITY[b.assessment_kind]
-      : 0;
+    const normA = normalizeCareerAssessmentRow(a);
+    const normB = normalizeCareerAssessmentRow(b);
+    const typeA = normalizeAssessmentType(normA.assessmentType);
+    const typeB = normalizeAssessmentType(normB.assessmentType);
+    const pa = typeA ? ASSESSMENT_KIND_PRIORITY[typeA] : 0;
+    const pb = typeB ? ASSESSMENT_KIND_PRIORITY[typeB] : 0;
     if (pb !== pa) return pb - pa;
-    return Date.parse(b.created_at) - Date.parse(a.created_at);
+    return Date.parse(normB.createdAt) - Date.parse(normA.createdAt);
   });
 
   return sorted[0] ?? null;
@@ -44,18 +46,35 @@ export async function loadStudentCareerSnapshot(
     hasAssessment: false,
     topTraits: [],
     radarData: [],
+    primaryMajors: [],
+    secondaryMajors: [],
     suggestedMajors: [],
     pinnedUniversityNames: [],
   };
 
-  const { data, error } = await client
+  let rows: CareerAssessmentDbRow[] | null = null;
+  let error: { code?: string; message: string } | null = null;
+
+  const live = await client
     .from('career_assessments')
-    .select(
-      'assessment_kind, score_matrix, holland_code, ai_report, created_at',
-    )
+    .select(CAREER_ASSESSMENT_USER_SELECT)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(12);
+
+  rows = (live.data ?? null) as CareerAssessmentDbRow[] | null;
+  error = live.error;
+
+  if (error?.code === '42703') {
+    const legacy = await client
+      .from('career_assessments')
+      .select(LEGACY_CAREER_ASSESSMENT_SELECT)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(12);
+    rows = (legacy.data ?? null) as CareerAssessmentDbRow[] | null;
+    error = legacy.error;
+  }
 
   if (error) {
     if (error.code === '42P01') {
@@ -65,37 +84,50 @@ export async function loadStudentCareerSnapshot(
     return empty;
   }
 
-  const row = pickPreferredAssessment((data ?? []) as CareerRow[]);
+  const row = pickPreferredAssessment(rows ?? []);
   if (!row) {
     return empty;
   }
 
-  const scores = parseAssessmentScoreMatrix(row.score_matrix);
+  const normalized = normalizeCareerAssessmentRow(row);
+  const scores = parseAssessmentScoreMatrix(normalized.scoresRaw);
   if (!scores) {
     return empty;
   }
 
-  const kind = isAssessmentKind(row.assessment_kind)
-    ? row.assessment_kind
-    : ('quick_combo' as AssessmentKind);
+  const kind =
+    normalizeAssessmentType(normalized.assessmentType) ??
+    ('quick_combo' as AssessmentKind);
 
   const hollandCode =
-    row.holland_code?.trim() || scores.hollandCode || undefined;
+    normalized.hollandCodeFallback || scores.hollandCode || undefined;
   const hollandTitle = scores.hollandTitle || hollandCode;
+
+  const topTraits =
+    normalized.topTraits.length > 0
+      ? normalized.topTraits
+      : extractTopStrengthTraits(scores);
+
+  const tiered = suggestTieredMajors(scores.topRiasec);
 
   return {
     hasAssessment: true,
     assessmentKind: kind,
     hollandCode,
     hollandTitle,
-    topTraits: extractTopStrengthTraits(scores),
+    topTraits,
     radarData: riasecRadarData(scores).map(({ axis, value }) => ({
       axis,
       value,
     })),
-    aiInterpretation: row.ai_report?.trim() || null,
-    assessedAt: row.created_at,
-    suggestedMajors: suggestSampleMajors(scores.topRiasec).map((m) => m.title),
+    aiInterpretation: normalized.aiInterpretation,
+    assessedAt: normalized.createdAt,
+    primaryMajors: tiered.primaryMajors,
+    secondaryMajors: tiered.secondaryMajors,
+    suggestedMajors: [
+      ...tiered.primaryMajors,
+      ...tiered.secondaryMajors,
+    ].map((m) => m.title),
     pinnedUniversityNames: [],
   };
 }

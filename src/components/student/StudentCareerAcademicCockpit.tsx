@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Building2, Compass, GraduationCap, Target } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { MajorMatchGroups } from '@/components/career/MajorMatchGroups';
 import { CareerRadarChart } from '@/components/student/CareerRadarChart';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 import type { UniversityThresholdProgress } from '@/lib/student-dashboard/university-threshold-progress';
@@ -179,6 +180,14 @@ export function StudentCareerAcademicCockpit({
                 </div>
               ) : null}
               <CareerRadarChart data={career.radarData} />
+              {career.primaryMajors.length > 0 ||
+              career.secondaryMajors.length > 0 ? (
+                <MajorMatchGroups
+                  primaryMajors={career.primaryMajors}
+                  secondaryMajors={career.secondaryMajors}
+                  compact
+                />
+              ) : null}
               {career.aiInterpretation ? (
                 <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">
                   {career.aiInterpretation}

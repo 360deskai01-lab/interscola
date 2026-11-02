@@ -1,3 +1,4 @@
+import type { SampleMajorSuggestion } from '@/lib/assessment/majors';
 import type { UniversityThresholdProgress } from '@/lib/student-dashboard/university-threshold-progress';
 import type { StudentGoalsContext } from '@/lib/student-profile/types';
 import type { AssessmentKind } from '@/types/assessment';
@@ -13,7 +14,9 @@ export interface StudentCareerSnapshot {
   radarData: { axis: string; value: number }[];
   aiInterpretation?: string | null;
   assessedAt?: string;
-  /** Öğretmen / kokpit özeti için örnek bölüm adları */
+  primaryMajors: SampleMajorSuggestion[];
+  secondaryMajors: SampleMajorSuggestion[];
+  /** Öğretmen özeti için düz liste (birincil + ikincil başlıklar) */
   suggestedMajors: string[];
   pinnedUniversityNames: string[];
 }

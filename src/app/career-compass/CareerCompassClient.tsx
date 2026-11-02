@@ -25,7 +25,8 @@ import {
   DEEP_ASSESSMENT_META,
   getDeepQuestions,
 } from '@/lib/assessment/deep-questions';
-import { suggestSampleMajors } from '@/lib/assessment/majors';
+import { suggestTieredMajors } from '@/lib/assessment/majors';
+import { MajorMatchGroups } from '@/components/career/MajorMatchGroups';
 import { calculateScores, riasecRadarData } from '@/lib/assessment/scoring';
 import { QUICK_COMBO_QUESTIONS } from '@/lib/assessment/questions';
 import type {
@@ -140,10 +141,15 @@ function ResultsView({
   onRestart: () => void;
 }): ReactNode {
   const radarData = useMemo(() => riasecRadarData(scores), [scores]);
-  const majors = useMemo(
-    () => suggestSampleMajors(scores.topRiasec),
+  const tieredMajors = useMemo(
+    () => suggestTieredMajors(scores.topRiasec),
     [scores.topRiasec],
   );
+  const [radarMounted, setRadarMounted] = useState(false);
+
+  useEffect(() => {
+    setRadarMounted(true);
+  }, []);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -154,12 +160,12 @@ function ResultsView({
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-          <h3 className="mb-2 text-sm font-medium text-slate-200">
-            RIASEC Radar Profili
-          </h3>
-          <div className="h-72 w-full">
+      <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4 sm:p-5">
+        <h3 className="mb-2 text-sm font-medium text-slate-200">
+          RIASEC Radar Profili
+        </h3>
+        <div className="h-72 w-full">
+          {radarMounted ? (
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
                 <PolarGrid stroke="rgba(255,255,255,0.12)" />
@@ -176,25 +182,16 @@ function ResultsView({
                 />
               </RadarChart>
             </ResponsiveContainer>
-          </div>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-slate-500">
+              Grafik yükleniyor…
+            </div>
+          )}
         </div>
-
-        <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-5">
-          <h3 className="text-sm font-medium text-slate-200">
-            Uyumlu örnek bölümler
-          </h3>
-          <ul className="mt-4 space-y-4">
-            {majors.map((major) => (
-              <li
-                key={major.title}
-                className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4"
-              >
-                <p className="font-semibold text-emerald-100">{major.title}</p>
-                <p className="mt-1 text-sm text-slate-400">{major.rationale}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <MajorMatchGroups
+          primaryMajors={tieredMajors.primaryMajors}
+          secondaryMajors={tieredMajors.secondaryMajors}
+        />
       </div>
 
       <div className="relative overflow-hidden rounded-2xl border border-white/10">
