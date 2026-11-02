@@ -143,16 +143,20 @@ export function UniversityExplorer({
     ],
   );
 
-  const hasActiveFilters = useMemo(() => {
+  /** Sıfırla butonu: arama, ülke ve keşif filtreleri (sıralama hariç). */
+  const hasClearableFilters = useMemo(() => {
     return (
       activeFilters.country !== 'ALL' ||
       activeFilters.search.trim().length > 0 ||
       activeFilters.discipline.trim().length > 0 ||
       Boolean(activeFilters.tuitionTier) ||
-      Boolean(activeFilters.examType) ||
-      activeFilters.sortBy !== 'popular'
+      Boolean(activeFilters.examType)
     );
   }, [activeFilters]);
+
+  const disciplineActive = activeFilters.discipline.trim().length > 0;
+  const tuitionActive = Boolean(activeFilters.tuitionTier);
+  const examActive = Boolean(activeFilters.examType);
 
   const navigate = useCallback(
     (filters: UniversityExplorerInitialFilters, nextPage: number) => {
@@ -232,13 +236,27 @@ export function UniversityExplorer({
                   />
                 </span>
               </label>
-              <button
-                type="submit"
-                disabled={pending}
-                className="mt-2 w-full rounded-xl border border-indigo-400/35 bg-indigo-500/15 py-2 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/25 disabled:opacity-50"
-              >
-                Ara
-              </button>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="min-w-0 flex-1 rounded-xl border border-indigo-400/35 bg-indigo-500/15 py-2 text-xs font-semibold text-indigo-100 transition hover:bg-indigo-500/25 disabled:opacity-50"
+                >
+                  Ara
+                </button>
+                {hasClearableFilters ? (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={clearAllFilters}
+                    title="Tüm filtreleri sıfırla"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-white/10 px-2.5 py-2 text-[11px] font-medium text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <RotateCcw className="size-3.5" aria-hidden />
+                    Sıfırla
+                  </button>
+                ) : null}
+              </div>
             </form>
 
             <div className="mt-5">
@@ -271,6 +289,18 @@ export function UniversityExplorer({
                 Akademik alan
               </span>
               <div className="mt-2 space-y-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => patchFilters({ discipline: '' })}
+                  className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium transition disabled:opacity-60 ${
+                    !disciplineActive
+                      ? 'border-violet-400/40 bg-violet-500/15 text-violet-100'
+                      : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-white/20'
+                  }`}
+                >
+                  Tümü
+                </button>
                 {DISCIPLINE_GROUPS.map((group) => {
                   const active = activeFilters.discipline === group.id;
                   return (
@@ -302,6 +332,18 @@ export function UniversityExplorer({
                 Yıllık eğitim harcı
               </span>
               <div className="mt-2 space-y-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => patchFilters({ tuitionTier: undefined })}
+                  className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium transition disabled:opacity-60 ${
+                    !tuitionActive
+                      ? 'border-emerald-400/40 bg-emerald-500/12 text-emerald-100'
+                      : 'border-white/10 bg-white/[0.02] text-slate-300 hover:border-white/20'
+                  }`}
+                >
+                  Tümü
+                </button>
                 {TUITION_TIER_OPTIONS.map((tier) => {
                   const active = activeFilters.tuitionTier === tier.id;
                   return (
@@ -337,6 +379,18 @@ export function UniversityExplorer({
                 Kabul sınavı
               </span>
               <div className="mt-2 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => patchFilters({ examType: undefined })}
+                  className={`rounded-lg border px-2.5 py-2 text-left text-[11px] font-medium transition disabled:opacity-60 ${
+                    !examActive
+                      ? 'border-sky-400/40 bg-sky-500/12 text-sky-100'
+                      : 'border-white/10 text-slate-300 hover:border-white/20'
+                  }`}
+                >
+                  Tümü
+                </button>
                 {(
                   [
                     { id: 'SAT' as const, label: 'Digital SAT barajı olanlar' },
@@ -373,6 +427,18 @@ export function UniversityExplorer({
                 })}
               </div>
             </div>
+
+            {hasClearableFilters ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={clearAllFilters}
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-2.5 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-50"
+              >
+                <RotateCcw className="size-3.5" aria-hidden />
+                Filtreleri Temizle
+              </button>
+            ) : null}
           </div>
         </aside>
 
@@ -411,7 +477,7 @@ export function UniversityExplorer({
                   <option value="tuition_asc">Harç dilimi (artan)</option>
                 </select>
               </label>
-              {hasActiveFilters ? (
+              {hasClearableFilters ? (
                 <button
                   type="button"
                   disabled={pending}
