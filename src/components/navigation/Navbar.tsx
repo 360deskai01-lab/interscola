@@ -219,9 +219,11 @@ export function Navbar({
           <NavDropdown label="Test Et" items={testLinksResolved} align="right" />
           {PRIMARY_NAV_LINKS.map((item) => {
             const active =
-              item.href === '/universities' &&
-              (pathname === '/universities' ||
-                pathname.startsWith('/universities/'));
+              (item.href === '/universities' &&
+                (pathname === '/universities' ||
+                  pathname.startsWith('/universities/'))) ||
+              (item.href === '/career-compass' &&
+                pathname.startsWith('/career-compass'));
             return (
               <Link
                 key={item.href}
@@ -301,6 +303,13 @@ export function Navbar({
                   className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-100 hover:bg-white/[0.06]"
                 >
                   Paketler
+                </Link>
+                <Link
+                  href="/career-compass"
+                  onClick={closeMobile}
+                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-violet-200 hover:bg-white/[0.06]"
+                >
+                  Kariyer Pusulası
                 </Link>
                 <Link
                   href="/universities"

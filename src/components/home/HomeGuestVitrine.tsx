@@ -71,6 +71,12 @@ export function HomeGuestVitrine(): ReactNode {
               Giriş Yap
             </Link>
             <Link
+              href="/career-compass"
+              className="inline-flex w-full min-w-[200px] items-center justify-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/15 px-6 py-3 text-sm font-semibold text-violet-100 transition hover:bg-violet-500/25 sm:w-auto"
+            >
+              Kariyer Pusulası — 24 Soru
+            </Link>
+            <Link
               href="/universities"
               className="inline-flex w-full items-center justify-center gap-2 text-sm font-medium text-sky-300 underline-offset-4 hover:underline sm:w-auto"
             >
@@ -81,22 +87,44 @@ export function HomeGuestVitrine(): ReactNode {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {PILLARS.map((pillar) => (
-          <article
-            key={pillar.title}
-            className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-indigo-400/25 hover:bg-white/[0.05]"
-          >
-            <span className="grid size-10 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200">
-              <pillar.icon className="size-5" />
-            </span>
-            <h2 className="mt-4 text-sm font-semibold text-slate-100">
-              {pillar.title}
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-400">
-              {pillar.body}
-            </p>
-          </article>
-        ))}
+        {PILLARS.map((pillar) => {
+          const href =
+            pillar.title === 'Bilişsel teşhis' ? '/career-compass' : undefined;
+          const inner = (
+            <>
+              <span className="grid size-10 place-items-center rounded-xl bg-indigo-500/15 text-indigo-200">
+                <pillar.icon className="size-5" />
+              </span>
+              <h2 className="mt-4 text-sm font-semibold text-slate-100">
+                {pillar.title}
+              </h2>
+              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+                {pillar.body}
+              </p>
+              {href ? (
+                <span className="mt-3 inline-flex text-xs font-medium text-violet-300">
+                  Hemen test et →
+                </span>
+              ) : null}
+            </>
+          );
+          return href ? (
+            <Link
+              key={pillar.title}
+              href={href}
+              className="block rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-indigo-400/25 hover:bg-white/[0.05]"
+            >
+              {inner}
+            </Link>
+          ) : (
+            <article
+              key={pillar.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-indigo-400/25 hover:bg-white/[0.05]"
+            >
+              {inner}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
