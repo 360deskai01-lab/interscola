@@ -1,3 +1,7 @@
+import type { TuitionTier } from '@/lib/universities/explorer-config';
+
+export type { TuitionTier } from '@/lib/universities/explorer-config';
+
 /** `public.target_universities` satır sözleşmesi (DB: min_sat_score, min_ielts_band, min_alevel, min_gpa). */
 export interface University {
   id: string;
@@ -21,12 +25,15 @@ export interface University {
   website_url: string | null;
   logo_url: string | null;
   cover_image_url: string | null;
+  disciplines?: string[];
+  tuition_tier?: TuitionTier | string | null;
 }
 
 export type UniversityCountryFilter =
   | 'ALL'
   | 'İtalya'
   | 'Hollanda'
+  | 'Almanya'
   | 'İngiltere'
   | 'ABD';
 

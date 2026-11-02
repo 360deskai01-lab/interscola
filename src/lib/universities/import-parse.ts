@@ -2,6 +2,7 @@ import type {
   BulkUniversityImportRow,
   UniversityPublicationStatus,
 } from '@/lib/universities/admin-types';
+import { isTuitionTier } from '@/lib/universities/explorer-config';
 
 function readString(
   record: Record<string, unknown>,
@@ -44,6 +45,35 @@ function readStatus(
     return 'published';
   }
   return undefined;
+}
+
+function readStringArray(
+  record: Record<string, unknown>,
+  keys: string[],
+): string[] | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      const items = value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean);
+      if (items.length > 0) return items;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      return value
+        .split(/[,;|]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+  }
+  return undefined;
+}
+
+function readTuitionTier(record: Record<string, unknown>): string | undefined {
+  const raw = readString(record, ['tuitionTier', 'tuition_tier', 'tuitiontier']);
+  if (!raw) return undefined;
+  const upper = raw.toUpperCase().replace(/\s+/g, '_');
+  return isTuitionTier(upper) ? upper : raw;
 }
 
 /** JSON dizi veya tek nesne → normalize edilmiş içe aktarma satırları. */
@@ -121,8 +151,10 @@ export function parseJsonUniversityImports(
       tuitionFeeRange: readString(record, [
         'tuitionFeeRange',
         'tuition_fee_range',
-        'tuition',
+        'tuition_range',
       ]),
+      disciplines: readStringArray(record, ['disciplines', 'discipline', 'alan']),
+      tuitionTier: readTuitionTier(record),
       status: readStatus(record),
     });
   }

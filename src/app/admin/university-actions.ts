@@ -10,6 +10,11 @@ import type {
   UniversityPublicationStatus,
   UniversityUpsertInput,
 } from '@/lib/universities/admin-types';
+import {
+  TUITION_TIERS,
+  UNIVERSITY_DISCIPLINE_TAGS,
+  isTuitionTier,
+} from '@/lib/universities/explorer-config';
 import { slugifyUniversityName, ensureUniqueSlug } from '@/lib/universities/slug';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
 import { TARGET_UNIVERSITY_SELECT } from '@/lib/universities/repository';
@@ -456,6 +461,35 @@ function validateImportRow(
     return { ok: false, error: `Satır ${index + 1}: geçersiz status değeri.` };
   }
 
+  let disciplines: string[] | undefined;
+  if (row.disciplines?.length) {
+    const normalized: string[] = [];
+    for (const tag of row.disciplines) {
+      const t = tag.trim();
+      if (!t) continue;
+      if (!(UNIVERSITY_DISCIPLINE_TAGS as readonly string[]).includes(t)) {
+        return {
+          ok: false,
+          error: `Satır ${index + 1}: geçersiz disiplin "${t}".`,
+        };
+      }
+      if (!normalized.includes(t)) normalized.push(t);
+    }
+    disciplines = normalized.length > 0 ? normalized : undefined;
+  }
+
+  let tuitionTier: string | undefined;
+  if (row.tuitionTier?.trim()) {
+    const raw = row.tuitionTier.trim().toUpperCase().replace(/\s+/g, '_');
+    if (!isTuitionTier(raw)) {
+      return {
+        ok: false,
+        error: `Satır ${index + 1}: tuition_tier şunlardan biri olmalı: ${TUITION_TIERS.join(', ')}.`,
+      };
+    }
+    tuitionTier = raw;
+  }
+
   return {
     ok: true,
     row: {
@@ -468,6 +502,8 @@ function validateImportRow(
       minAlevel: row.minAlevel?.trim() || undefined,
       websiteUrl: row.websiteUrl?.trim() || undefined,
       tuitionFeeRange: row.tuitionFeeRange?.trim() || undefined,
+      disciplines,
+      tuitionTier,
       status,
     },
   };
@@ -550,6 +586,8 @@ export async function bulkImportUniversitiesAction(
       min_alevel: string | null;
       website_url: string | null;
       tuition_fee_range: string | null;
+      disciplines: string[] | null;
+      tuition_tier: string | null;
       status: UniversityPublicationStatus;
       is_featured: boolean;
     }[] = [];
@@ -570,6 +608,8 @@ export async function bulkImportUniversitiesAction(
         min_alevel: row.minAlevel ?? null,
         website_url: row.websiteUrl ?? null,
         tuition_fee_range: row.tuitionFeeRange ?? null,
+        disciplines: row.disciplines ?? null,
+        tuition_tier: row.tuitionTier ?? null,
         status: row.status ?? 'published',
         is_featured: false,
       });

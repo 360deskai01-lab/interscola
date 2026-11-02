@@ -3,7 +3,6 @@
 import { getCurrentProfile } from '@/lib/auth';
 import {
   fetchTargetUniversityBySlug,
-  mapTargetUniversityRow,
   TARGET_UNIVERSITY_SELECT,
 } from '@/lib/universities/repository';
 import { ATTEMPTS_TABLE, getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
@@ -11,6 +10,10 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 
 import { parseCaieGradeFromScaledResult } from '@/lib/universities/caie-grade';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
+import {
+  fetchPublishedUniversitiesList,
+  type UniversityListFilters,
+} from '@/lib/universities/list-query';
 import type {
   StudentLatestScores,
   University,
@@ -22,16 +25,25 @@ export type {
   University,
   UniversityCountryFilter,
 } from '@/lib/universities/types';
+export type { UniversityListFilters } from '@/lib/universities/list-query';
+export type {
+  TuitionTier,
+  UniversityExamFilter,
+  UniversitySortBy,
+} from '@/lib/universities/explorer-config';
 
 export type TargetUniversity = University;
 
-export async function getTargetUniversitiesAction(filters?: {
-  country?: string;
-  search?: string;
-}): Promise<{
+export async function getTargetUniversitiesAction(
+  filters?: UniversityListFilters,
+): Promise<{
   success: boolean;
   error?: string;
   universities?: University[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
 }> {
   try {
     const client = await getSupabaseServer(PROFILES_SCHEMA);
@@ -42,59 +54,16 @@ export async function getTargetUniversitiesAction(filters?: {
       };
     }
 
-    let query = client
-      .from('target_universities')
-      .select(TARGET_UNIVERSITY_SELECT)
-      .eq('status', 'published')
-      .order('name', { ascending: true });
+    const result = await fetchPublishedUniversitiesList(client, filters);
 
-    const country = filters?.country?.trim();
-    if (country && country !== 'ALL' && country !== 'Tümü') {
-      query = query.eq('country', country);
-    }
-
-    const search = filters?.search?.trim();
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,city.ilike.%${search}%`);
-    }
-
-    let { data, error } = await query;
-
-    if (error?.code === '42703') {
-      let legacyQuery = client
-        .from('target_universities')
-        .select(TARGET_UNIVERSITY_SELECT)
-        .order('name', { ascending: true });
-      if (country && country !== 'ALL' && country !== 'Tümü') {
-        legacyQuery = legacyQuery.eq('country', country);
-      }
-      if (search) {
-        legacyQuery = legacyQuery.or(
-          `name.ilike.%${search}%,city.ilike.%${search}%`,
-        );
-      }
-      const legacy = await legacyQuery;
-      data = legacy.data;
-      error = legacy.error;
-    }
-
-    if (error) {
-      console.error(
-        '[UNIVERSITIES_FETCH_ERROR]:',
-        formatSupabaseError(error),
-        { select: TARGET_UNIVERSITY_SELECT },
-      );
-      return {
-        success: false,
-        error: 'Üniversite rehberi yüklenemedi.',
-      };
-    }
-
-    const universities = ((data ?? []) as Parameters<
-      typeof mapTargetUniversityRow
-    >[0][]).map(mapTargetUniversityRow);
-
-    return { success: true, universities };
+    return {
+      success: true,
+      universities: result.universities,
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+      totalPages: result.totalPages,
+    };
   } catch (error) {
     console.error(
       '[UNIVERSITIES_FETCH_ERROR]:',

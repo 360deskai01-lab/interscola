@@ -6,8 +6,10 @@ import { getSupabasePublicAnon } from '@/lib/supabase/public-anon';
 /**
  * `public.target_universities` — kolon adları DB ile birebir (min_sat_score / min_ielts_band).
  */
-export const TARGET_UNIVERSITY_SELECT =
+export const TARGET_UNIVERSITY_SELECT_LEGACY =
   'id, slug, name, country, city, min_sat_score, min_ielts_band, min_alevel, min_gpa, tuition_fee_range, monthly_living_cost, accommodation_info, application_deadlines, description, scholarship_info, local_exam_requirements, website_url, logo_url, cover_image_url';
+
+export const TARGET_UNIVERSITY_SELECT = `${TARGET_UNIVERSITY_SELECT_LEGACY}, tuition_tier, disciplines`;
 
 type TargetUniversityRow = {
   id: string;
@@ -20,6 +22,8 @@ type TargetUniversityRow = {
   min_alevel: string | null;
   min_gpa: string | null;
   tuition_fee_range: string | null;
+  tuition_tier?: string | null;
+  disciplines?: string[] | null;
   monthly_living_cost: string | null;
   accommodation_info: string | null;
   application_deadlines: string | null;
@@ -51,6 +55,10 @@ export function mapTargetUniversityRow(row: TargetUniversityRow): University {
     min_alevel: row.min_alevel?.trim() || null,
     min_gpa: row.min_gpa?.trim() || null,
     tuition_fee_range: row.tuition_fee_range ?? null,
+    tuition_tier: row.tuition_tier?.trim() || null,
+    disciplines: Array.isArray(row.disciplines)
+      ? row.disciplines.filter((d): d is string => typeof d === 'string')
+      : undefined,
     monthly_living_cost: row.monthly_living_cost ?? null,
     accommodation_info: row.accommodation_info ?? null,
     application_deadlines: row.application_deadlines ?? null,

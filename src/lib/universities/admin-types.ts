@@ -34,6 +34,8 @@ export interface BulkUniversityImportRow {
   minAlevel?: string;
   websiteUrl?: string;
   tuitionFeeRange?: string;
+  disciplines?: string[];
+  tuitionTier?: string;
   status?: UniversityPublicationStatus;
 }
 

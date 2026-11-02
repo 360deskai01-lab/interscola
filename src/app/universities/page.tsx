@@ -5,29 +5,32 @@ import type { ReactNode } from 'react';
 import {
   getStudentLatestScoresAction,
   getTargetUniversitiesAction,
-  type UniversityCountryFilter,
 } from '@/app/universities/actions';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { UniversityExplorer } from '@/components/universities/UniversityExplorer';
+import {
+  isTuitionTier,
+  parseExamFilter,
+  parseExplorerCountry,
+  parsePage,
+  parseSortBy,
+  type ExplorerCountryFilter,
+} from '@/lib/universities/explorer-config';
 
 export const instant = false;
 
-const ALLOWED_COUNTRIES = new Set<UniversityCountryFilter>([
-  'ALL',
-  'İtalya',
-  'Hollanda',
-  'İngiltere',
-  'ABD',
-]);
-
-function parseCountryFilter(raw: string | undefined): UniversityCountryFilter {
-  if (!raw?.trim()) return 'ALL';
-  const value = raw.trim() as UniversityCountryFilter;
-  return ALLOWED_COUNTRIES.has(value) ? value : 'ALL';
-}
+export type ExplorerSearchParams = {
+  country?: string;
+  search?: string;
+  discipline?: string;
+  tuitionTier?: string;
+  examType?: string;
+  sortBy?: string;
+  page?: string;
+};
 
 type UniversitiesPageProps = {
-  searchParams: Promise<{ country?: string; search?: string }>;
+  searchParams: Promise<ExplorerSearchParams>;
 };
 
 /**
@@ -39,13 +42,26 @@ export default async function UniversitiesPage({
   await connection();
 
   const params = await searchParams;
-  const country = parseCountryFilter(params.country);
+  const country = parseExplorerCountry(params.country);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
+  const discipline =
+    typeof params.discipline === 'string' ? params.discipline.trim() : '';
+  const tuitionTierRaw =
+    typeof params.tuitionTier === 'string' ? params.tuitionTier.trim() : '';
+  const tuitionTier = isTuitionTier(tuitionTierRaw) ? tuitionTierRaw : undefined;
+  const examType = parseExamFilter(params.examType);
+  const sortBy = parseSortBy(params.sortBy);
+  const page = parsePage(params.page);
 
   const [listResult, studentScores] = await Promise.all([
     getTargetUniversitiesAction({
       country: country === 'ALL' ? undefined : country,
       search: search.length > 0 ? search : undefined,
+      discipline: discipline.length > 0 ? discipline : undefined,
+      tuitionTier,
+      examType,
+      sortBy,
+      page,
     }),
     getStudentLatestScoresAction(),
   ]);
@@ -55,8 +71,7 @@ export default async function UniversitiesPage({
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-indigo-950/40 text-slate-100">
       <NavbarServer />
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-14">
-
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:py-14">
         <header className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-sky-300/90">
@@ -83,8 +98,16 @@ export default async function UniversitiesPage({
 
         <UniversityExplorer
           universities={universities}
+          total={listResult.total ?? universities.length}
+          page={listResult.page ?? page}
+          pageSize={listResult.pageSize ?? 12}
+          totalPages={listResult.totalPages ?? 1}
           initialCountry={country}
           initialSearch={search}
+          initialDiscipline={discipline}
+          initialTuitionTier={tuitionTier}
+          initialExamType={examType}
+          initialSortBy={sortBy}
           studentScores={studentScores}
           loadError={listResult.success ? null : listResult.error}
         />
