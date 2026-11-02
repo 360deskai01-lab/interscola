@@ -1,0 +1,64 @@
+# INTERSCOLA ENGINEERING MANIFESTO & PROTOCOL
+
+TBS First-Principles Mühendislik Anayasası — Interscola projesinde çalışan tüm ajan oturumları bu protokole uyar.
+Next.js / App Router ayrıntıları için `AGENTS.md` ve `node_modules/next/dist/docs/` referans alınır.
+
+---
+
+## 1. FIRST-PRINCIPLES & ATOMİK İŞ YAPIŞ
+
+- Asla semptom yamama (band-aid fix); daima DB şeması, RLS ve veri sözleşmesi kök nedenine in.
+- **Core-Loop First:** Çalışmayan hayali mekanizmalar üzerine UI inşa etme.
+- Her adım tek bir mantıksal birim (Single Responsibility) olarak tamamlanır.
+
+---
+
+## 2. SAĞLIK RAPORU ZORUNLULUĞU
+
+Her görev bitiminde işlem **tamamlanmış sayılmaz**; aşağıdaki şablonla **Türkçe** sağlık raporu verilir:
+
+### A. Statik Sağlık
+
+- `npx tsc --noEmit`
+- `npm run build` (anlamlı kod/değişikliklerde zorunlu)
+
+### B. Mimari Değişiklikler ve Kök Neden Tespiti
+
+- Ne değişti, hangi dosyalar/rotalar/ tablolar etkilendi.
+- Amaç → veri akışı → sunucu kapısı ↔ istemci (UI) tutarlılığı.
+- Hatalarda semptom değil; şema, RLS, Server Action / Server Component sınırları.
+
+### C. Dürüstçe Doğrulanamayanlar
+
+Canlı DB kısıtı, şifresiz oturum, görsel test eksikliği, harici API kotası, RLS’in service-role’siz davranışı vb. açıkça yazılır.
+
+### D. Açık Kalanlar / Teknik Borç
+
+Bilinçli sapmalar, regresyon riski, sonraki faz adayları.
+
+---
+
+## 3. NEXT.JS 16 & REACT 19 KURALLARI
+
+- Dynamic route **Server Component**’lerde `await connection();` ve `export const instant = false;` **kaldırılmaz** (ikisi birlikte; `cacheComponents` build geçmişi).
+- Sayfa yetki kapıları asla Client Component’e bırakılmaz; Server Component’te `redirect()` ile zorunlu tutulur.
+- Header/API portal linkleri (`role`, `status`) sunucu kapısı ile simetrik olmalıdır.
+- Form kilitlenmelerini önlemek için Server Action çağrılarında React **`useTransition`** ve iyimser (optimistic) state yönetimi esastır.
+
+---
+
+## 4. SUPABASE & VERİ BÜTÜNLÜĞÜ
+
+- DB ilişkilerinde yarış durumlarını (TOCTOU) önlemek için **UNIQUE** kısıtları ve **koşullu UPDATE** kullanılır.
+- `PROFILES_SCHEMA` sabiti tek merkezden (`src/lib/supabase.ts`) import edilir; mükerrer şema sabiti tanımlanmaz.
+- Mükerrer veri yazılmasını önleyen constraint kontrolleri kod düzeyinde yakalanır (**23505** koruması); kullanıcıya anlaşılır mesaj, gereksiz exception fırlatma yok.
+
+---
+
+## Proje bağlamı (referans)
+
+- **Stack:** Next.js 16 App Router, React 19, TypeScript, Tailwind, Supabase SSR (`@supabase/ssr`), Gemini (`@google/genai`).
+- **Profiller:** `public.profiles`; denemeler: `interscola.assessment_attempts`; kütüphane/atama: `public.libraries`, `public.assignments`.
+- **Oturum:** `/api/auth/session` → `{ user, role, status }`.
+
+Çelişki durumunda önce bu dosya ve `AGENTS.md`, ardından kod incelemesi esas alınır.

@@ -1,0 +1,339 @@
+'use client';
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
+import { GraduationCap, Loader2 } from 'lucide-react';
+import type {
+  AssessmentPayload,
+  EvaluationResult,
+  ExamQuestion,
+} from '@/types/exam';
+import { isRecord } from '@/lib/exam-shared';
+import { ExamResults } from '@/components/exam/ExamResults';
+import { ExamRunner } from '@/components/exam/ExamRunner';
+import { ErrorCard, GlowOrb } from '@/components/exam/ui';
+
+type ExamPhase = 'exam' | 'grading' | 'results';
+
+function extractApiError(payload: unknown, status: number): string {
+  if (isRecord(payload) && typeof payload.error === 'string' && payload.error) {
+    return payload.error;
+  }
+  return `Sunucu beklenmeyen bir yanıt döndürdü (${status}).`;
+}
+
+async function postJson(url: string, body: unknown): Promise<unknown> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(extractApiError(payload, response.status));
+  }
+  return payload;
+}
+
+function pickEvaluation(payload: unknown): EvaluationResult {
+  if (!isRecord(payload) || !isRecord(payload.evaluation)) {
+    throw new Error('Değerlendirme alınamadı.');
+  }
+  return payload.evaluation as unknown as EvaluationResult;
+}
+
+interface StudentAssignmentExamClientProps {
+  assignmentId: string;
+  materialTitle: string;
+  exam: AssessmentPayload;
+  sessionLabel?: string;
+  reviewHref?: string;
+  isSelfPractice?: boolean;
+  libraryId?: string | null;
+  onStartSelfPacedExam?: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    assignmentId?: string;
+  }>;
+  onCompleteAssignment: (
+    assignmentId: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+}
+
+export function StudentAssignmentExamClient({
+  assignmentId,
+  materialTitle,
+  exam,
+  sessionLabel = 'Eğitmen Sınavı',
+  reviewHref,
+  isSelfPractice = false,
+  libraryId = null,
+  onStartSelfPacedExam,
+  onCompleteAssignment,
+}: StudentAssignmentExamClientProps): ReactNode {
+  const router = useRouter();
+  const [retakePending, startRetakeTransition] = useTransition();
+  const [phase, setPhase] = useState<ExamPhase>('exam');
+  const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [finishedFast, setFinishedFast] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [completionWarning, setCompletionWarning] = useState<string | null>(
+    null,
+  );
+
+  const deadlineRef = useRef<number | null>(null);
+  const hasAutoSubmittedRef = useRef(false);
+  const initializedRef = useRef(false);
+
+  const questions = exam.questions;
+  const question: ExamQuestion | undefined = questions[currentIndex];
+  const totalQuestions = questions.length;
+  const progress =
+    totalQuestions === 0 ? 0 : (currentIndex + 1) / totalQuestions;
+
+  const requiresEveryAnswer = exam.engineType !== 'OBJECTIVE';
+
+  const unansweredCount = useMemo(
+    () =>
+      exam.questions.filter((item) => !(answers[item.id] ?? '').trim()).length,
+    [answers, exam.questions],
+  );
+
+  const answeredEvery = unansweredCount === 0;
+
+  useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    deadlineRef.current = Date.now() + totalSeconds * 1000;
+    setSecondsLeft(totalSeconds);
+  }, [exam.durationMinutes]);
+
+  const goTo = useCallback(
+    (index: number) => {
+      setDirection(index > currentIndex ? 1 : -1);
+      setCurrentIndex(Math.max(0, Math.min(totalQuestions - 1, index)));
+    },
+    [currentIndex, totalQuestions],
+  );
+
+  const handleRetake = useCallback(() => {
+    if (isSelfPractice && libraryId && onStartSelfPacedExam) {
+      startRetakeTransition(async () => {
+        const result = await onStartSelfPacedExam(libraryId);
+        if (result.success && result.assignmentId) {
+          router.push(`/exam-session/${result.assignmentId}`);
+          return;
+        }
+        router.push('/student/dashboard?tab=explore');
+      });
+      return;
+    }
+
+    setAnswers({});
+    setCurrentIndex(0);
+    setEvaluation(null);
+    setCompletionWarning(null);
+    hasAutoSubmittedRef.current = false;
+    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    deadlineRef.current = Date.now() + totalSeconds * 1000;
+    setSecondsLeft(totalSeconds);
+    setPhase('exam');
+  }, [
+    exam.durationMinutes,
+    isSelfPractice,
+    libraryId,
+    onStartSelfPacedExam,
+    router,
+  ]);
+
+  const finishExam = useCallback(async () => {
+    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    setFinishedFast(secondsLeft > totalSeconds / 2);
+
+    setError(null);
+    setPhase('grading');
+
+    try {
+      const payload = await postJson('/api/grade-exam', {
+        exam,
+        studentAnswers: answers,
+        assignmentId,
+      });
+      setEvaluation(pickEvaluation(payload));
+
+      const completeResult = await onCompleteAssignment(assignmentId);
+      if (!completeResult.success) {
+        setCompletionWarning(
+          completeResult.error ??
+            'Karne hazır; ödev durumu panelde gecikmeli güncellenebilir.',
+        );
+      }
+
+      setPhase('results');
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Değerlendirme sırasında bir sorun oluştu.',
+      );
+      setPhase('exam');
+    }
+  }, [answers, assignmentId, exam, onCompleteAssignment, secondsLeft]);
+
+  useEffect(() => {
+    if (phase !== 'exam' || deadlineRef.current === null) return;
+
+    const update = () => {
+      if (deadlineRef.current === null) return;
+      const remaining = Math.max(
+        0,
+        Math.round((deadlineRef.current - Date.now()) / 1000),
+      );
+      setSecondsLeft(remaining);
+    };
+
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== 'exam') return;
+    if (secondsLeft > 0) return;
+    if (hasAutoSubmittedRef.current) return;
+
+    hasAutoSubmittedRef.current = true;
+    void finishExam();
+  }, [finishExam, phase, secondsLeft]);
+
+  return (
+    <div className="relative min-h-dvh overflow-hidden bg-slate-950 text-slate-100">
+      <GlowOrb className="size-[420px] bg-violet-600/35 -top-32 -left-24" delay={0} />
+      <GlowOrb className="size-[380px] bg-fuchsia-600/25 top-1/3 -right-32" delay={2} />
+
+      <AnimatePresence>
+        {phase === 'exam' || phase === 'grading' ? (
+          <motion.div
+            key="progress"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed inset-x-0 top-0 z-50 h-[3px] bg-white/5"
+          >
+            <motion.div
+              className="relative h-full bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <main className="relative mx-auto w-full max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 shadow-lg">
+              <GraduationCap className="size-6" />
+            </span>
+            <div>
+              <p className="text-lg font-semibold tracking-tight">
+                {sessionLabel}
+              </p>
+              <p className="text-xs text-slate-500">{materialTitle}</p>
+            </div>
+          </div>
+          <Link
+            href="/student/dashboard"
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm text-slate-300 transition hover:border-white/25 hover:text-white"
+          >
+            ← Öğrenci Paneli
+          </Link>
+        </header>
+
+        <AnimatePresence>
+          {error ? (
+            <ErrorCard message={error} onDismiss={() => setError(null)} />
+          ) : null}
+        </AnimatePresence>
+
+        {completionWarning ? (
+          <div
+            role="status"
+            className="mb-6 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100"
+          >
+            {completionWarning}
+          </div>
+        ) : null}
+
+        {phase === 'grading' ? (
+          <div className="grid place-items-center py-24">
+            <div className="flex flex-col items-center gap-5 text-center">
+              <Loader2 className="size-10 animate-spin text-violet-300" />
+              <p className="text-lg font-semibold">Yanıtların değerlendiriliyor</p>
+            </div>
+          </div>
+        ) : null}
+
+        {phase === 'exam' && question ? (
+          <ExamRunner
+            exam={exam}
+            question={question}
+            currentIndex={currentIndex}
+            totalQuestions={totalQuestions}
+            answers={answers}
+            secondsLeft={secondsLeft}
+            direction={direction}
+            requiresEveryAnswer={requiresEveryAnswer}
+            answeredEvery={answeredEvery}
+            unansweredCount={unansweredCount}
+            onAnswer={(questionId, answer) =>
+              setAnswers((prev) => ({ ...prev, [questionId]: answer }))
+            }
+            onNavigate={goTo}
+            onFinish={() => void finishExam()}
+          />
+        ) : null}
+
+        {phase === 'results' && evaluation ? (
+          <ExamResults
+            exam={exam}
+            evaluation={evaluation}
+            finishedFast={finishedFast}
+            answeredEvery={answeredEvery}
+            isHistoryView={false}
+            reviewHref={reviewHref}
+            retryLabel={
+              isSelfPractice
+                ? retakePending
+                  ? 'Yeni deneme hazırlanıyor…'
+                  : 'Yeni Temiz Deneme Başlat'
+                : undefined
+            }
+            onRetry={handleRetake}
+            onHome={() => {
+              window.location.href = isSelfPractice
+                ? '/student/dashboard?tab=explore'
+                : '/student/dashboard';
+            }}
+          />
+        ) : null}
+      </main>
+    </div>
+  );
+}
