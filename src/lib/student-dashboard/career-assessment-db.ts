@@ -2,7 +2,7 @@ import type { AssessmentKind } from '@/types/assessment';
 
 /** Canlı `public.career_assessments` okuma sözleşmesi. */
 export const CAREER_ASSESSMENT_USER_SELECT =
-  'id, assessment_type, scores, top_traits, ai_interpretation, created_at';
+  'id, assessment_type, scores, top_traits, ai_interpretation, holland_code, created_at';
 
 export type CareerAssessmentDbRow = {
   id: string;
@@ -19,13 +19,43 @@ export type CareerAssessmentDbRow = {
 
 export function normalizeAssessmentType(raw: string): AssessmentKind | null {
   const normalized = raw.trim().toLowerCase().replace(/-/g, '_');
-  if (normalized === 'quick_combo' || normalized === 'quick') {
+  if (
+    normalized === 'quick_combo' ||
+    normalized === 'quick' ||
+    normalized === 'quickcombo'
+  ) {
     return 'quick_combo';
   }
-  if (normalized === 'deep_riasec') return 'deep_riasec';
-  if (normalized === 'deep_big_five') return 'deep_big_five';
-  if (normalized === 'deep_cognitive') return 'deep_cognitive';
+  if (normalized === 'deep_riasec' || normalized === 'riasec') {
+    return 'deep_riasec';
+  }
+  if (
+    normalized === 'deep_big_five' ||
+    normalized === 'big_five' ||
+    normalized === 'bigfive'
+  ) {
+    return 'deep_big_five';
+  }
+  if (normalized === 'deep_cognitive' || normalized === 'cognitive') {
+    return 'deep_cognitive';
+  }
   return null;
+}
+
+/** Migration CHECK ile uyumlu birincil yazım (snake_case). */
+export function assessmentTypeToDb(kind: AssessmentKind): string {
+  return kind;
+}
+
+/** Canlı ortam alias denemeleri (okuma normalize; yazımda CHECK hatasında sırayla dene). */
+export function assessmentTypeDbVariants(kind: AssessmentKind): string[] {
+  const aliases: Record<AssessmentKind, string[]> = {
+    quick_combo: ['quick_combo', 'QUICK_COMBO'],
+    deep_riasec: ['deep_riasec', 'RIASEC'],
+    deep_big_five: ['deep_big_five', 'BIG_FIVE'],
+    deep_cognitive: ['deep_cognitive', 'COGNITIVE'],
+  };
+  return aliases[kind] ?? [kind];
 }
 
 export function parseTopTraitsFromDb(raw: unknown): string[] {

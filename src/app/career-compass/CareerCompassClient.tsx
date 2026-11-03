@@ -19,8 +19,17 @@ import {
 import { Compass, Loader2, Lock, Sparkles } from 'lucide-react';
 import {
   generateDeepCareerReportAction,
+  getCareerCompassProgressAction,
   saveCareerAssessmentAction,
 } from '@/app/career-compass/actions';
+import {
+  CAREER_COMPASS_STAGE_ORDER,
+  CAREER_STAGE_CTA,
+  CAREER_STAGE_LABELS,
+  computeCareerProgress,
+  mapDbTypeToStage,
+  type CareerCompassStageId,
+} from '@/lib/career-assessment/progress';
 import {
   DEEP_ASSESSMENT_META,
   getDeepQuestions,
@@ -131,13 +140,63 @@ function QuizCard({
   );
 }
 
+function CompassProgressBar({
+  progressPercent,
+  completedCount,
+  total,
+}: {
+  progressPercent: number;
+  completedCount: number;
+  total: number;
+}): ReactNode {
+  return (
+    <div className="mx-auto max-w-xl rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
+        <span>Kümülatif pusula ilerlemesi</span>
+        <span className="tabular-nums text-indigo-200">
+          {completedCount}/{total} · %{progressPercent}
+        </span>
+      </div>
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400 transition-[width]"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <ul className="mt-3 grid gap-1 text-[11px] text-slate-500 sm:grid-cols-3">
+        {CAREER_COMPASS_STAGE_ORDER.map((stage, index) => (
+          <li
+            key={stage}
+            className={
+              index < completedCount ? 'text-emerald-300/90' : 'text-slate-500'
+            }
+          >
+            {index < completedCount ? '✓ ' : `${index + 1}. `}
+            {CAREER_STAGE_LABELS[stage].replace(/ \(.*\)/, '')}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ResultsView({
   scores,
   isLoggedIn,
+  progressPercent,
+  completedCount,
+  totalStages,
+  nextStage,
+  onStartStage,
   onRestart,
 }: {
   scores: AssessmentScoreMatrix;
   isLoggedIn: boolean;
+  progressPercent: number;
+  completedCount: number;
+  totalStages: number;
+  nextStage: CareerCompassStageId | null;
+  onStartStage: (kind: AssessmentKind) => void;
   onRestart: () => void;
 }): ReactNode {
   const radarData = useMemo(() => riasecRadarData(scores), [scores]);
@@ -151,8 +210,19 @@ function ResultsView({
     setRadarMounted(true);
   }, []);
 
+  const nextCta =
+    nextStage && isLoggedIn ? CAREER_STAGE_CTA[nextStage] : null;
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
+      {isLoggedIn ? (
+        <CompassProgressBar
+          progressPercent={progressPercent}
+          completedCount={completedCount}
+          total={totalStages}
+        />
+      ) : null}
+
       <div className="rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-6 text-center">
         <p className="text-sm text-indigo-200">Holland Kodunuz</p>
         <p className="mt-2 text-2xl font-bold text-slate-50">
@@ -229,13 +299,26 @@ function ResultsView({
         ) : null}
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex flex-col items-center gap-3">
+        {nextCta ? (
+          <button
+            type="button"
+            onClick={() => onStartStage(nextStage!)}
+            className="inline-flex items-center gap-2 rounded-xl border border-indigo-400/50 bg-indigo-500/25 px-6 py-3 text-sm font-semibold text-indigo-50 transition hover:bg-indigo-500/35"
+          >
+            {nextCta.emoji} {nextCta.label}
+          </button>
+        ) : isLoggedIn && progressPercent >= 100 ? (
+          <p className="text-sm text-emerald-300/90">
+            Tebrikler — üç aşamalı pusula yolculuğunu tamamladınız.
+          </p>
+        ) : null}
         <button
           type="button"
           onClick={onRestart}
-          className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-300 hover:bg-white/5"
+          className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-400 hover:bg-white/5"
         >
-          Testi yeniden başlat
+          Ana menüye dön
         </button>
       </div>
     </div>
@@ -251,6 +334,38 @@ export default function CareerCompassClient({
   const [deepReport, setDeepReport] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [completedStages, setCompletedStages] = useState<
+    Set<CareerCompassStageId>
+  >(() => new Set());
+
+  const refreshProgress = useCallback(() => {
+    if (!isLoggedIn) return;
+    startTransition(async () => {
+      const progress = await getCareerCompassProgressAction();
+      if (progress.success && progress.completedStages) {
+        setCompletedStages(new Set(progress.completedStages));
+      }
+    });
+  }, [isLoggedIn]);
+
+  useEffect(() => {
+    refreshProgress();
+  }, [refreshProgress]);
+
+  const progressMeta = useMemo(
+    () => computeCareerProgress(completedStages),
+    [completedStages],
+  );
+
+  const markStageComplete = useCallback((kind: AssessmentKind) => {
+    const stage = mapDbTypeToStage(kind);
+    if (!stage) return;
+    setCompletedStages((prev) => {
+      const next = new Set(prev);
+      next.add(stage);
+      return next;
+    });
+  }, []);
 
   const persistResult = useCallback(
     (
@@ -258,6 +373,7 @@ export default function CareerCompassClient({
       answers: AssessmentAnswers,
       result: AssessmentScoreMatrix,
     ) => {
+      markStageComplete(kind);
       const guestSessionId = isLoggedIn ? null : ensureGuestSessionId();
       if (!isLoggedIn) {
         window.localStorage.setItem(
@@ -274,10 +390,12 @@ export default function CareerCompassClient({
         });
         if (!saved.success) {
           setSaveError(saved.error ?? 'Kayıt başarısız.');
+          return;
         }
+        refreshProgress();
       });
     },
-    [isLoggedIn],
+    [isLoggedIn, markStageComplete, refreshProgress],
   );
 
   const handleQuickComplete = useCallback(
@@ -352,6 +470,16 @@ export default function CareerCompassClient({
 
         {saveError ? (
           <p className="mb-4 text-center text-sm text-amber-200">{saveError}</p>
+        ) : null}
+
+        {isLoggedIn && phase !== 'quiz' ? (
+          <div className="mb-8">
+            <CompassProgressBar
+              progressPercent={progressMeta.percent}
+              completedCount={progressMeta.completedCount}
+              total={progressMeta.total}
+            />
+          </div>
         ) : null}
 
         {phase === 'intro' && deepKind === null ? (
@@ -433,6 +561,15 @@ export default function CareerCompassClient({
             <ResultsView
               scores={scores}
               isLoggedIn={isLoggedIn}
+              progressPercent={progressMeta.percent}
+              completedCount={progressMeta.completedCount}
+              totalStages={progressMeta.total}
+              nextStage={progressMeta.nextStage}
+              onStartStage={(kind) => {
+                setDeepKind(kind);
+                setPhase('quiz');
+                setDeepReport(null);
+              }}
               onRestart={() => {
                 setScores(null);
                 setPhase('intro');

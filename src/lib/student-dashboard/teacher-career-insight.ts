@@ -1,14 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { mergeAssessmentScoreMatrices } from '@/lib/career-assessment/merge-scores';
+import { computeCareerProgress } from '@/lib/career-assessment/progress';
+import type { SampleMajorSuggestion } from '@/lib/assessment/majors';
 import { suggestTieredMajors } from '@/lib/assessment/majors';
+import { normalizeCareerAssessmentRow } from '@/lib/student-dashboard/career-assessment-db';
 import {
-  CAREER_ASSESSMENT_USER_SELECT,
-  normalizeCareerAssessmentRow,
-  type CareerAssessmentDbRow,
-} from '@/lib/student-dashboard/career-assessment-db';
-import { loadStudentCareerSnapshot } from '@/lib/student-dashboard/load-career-assessment';
+  fetchCareerAssessmentRowsForUser,
+  loadCompletedCareerStages,
+  loadStudentCareerSnapshot,
+} from '@/lib/student-dashboard/load-career-assessment';
 import {
   extractTopStrengthTraits,
+  minimalAssessmentMatrixFromHolland,
   parseAssessmentScoreMatrix,
 } from '@/lib/student-dashboard/parse-score-matrix';
 import {
@@ -16,7 +20,6 @@ import {
   parseUniversityIds,
 } from '@/lib/student-profile/load-context';
 import type { CognitiveKey } from '@/types/assessment';
-import type { SampleMajorSuggestion } from '@/lib/assessment/majors';
 
 const COGNITIVE_KEYS: CognitiveKey[] = [
   'analytical',
@@ -39,12 +42,19 @@ export interface StudentCareerInsightForTeacher {
   hollandTitle?: string;
   topTraits: string[];
   cognitiveHighlights: string[];
+  radarData: { axis: string; value: number }[];
   primaryMajors: SampleMajorSuggestion[];
   secondaryMajors: SampleMajorSuggestion[];
   suggestedMajors: string[];
-  targetUniversities: { id: string; name: string; country: string; city: string | null }[];
+  targetUniversities: {
+    id: string;
+    name: string;
+    country: string;
+    city: string | null;
+  }[];
   aiInterpretation?: string | null;
   assessedAt?: string;
+  progressPercent?: number;
 }
 
 export async function loadStudentCareerInsightForTeacher(
@@ -57,15 +67,17 @@ export async function loadStudentCareerInsightForTeacher(
     studentName,
     topTraits: [],
     cognitiveHighlights: [],
+    radarData: [],
     primaryMajors: [],
     secondaryMajors: [],
     suggestedMajors: [],
     targetUniversities: [],
   };
 
-  const [career, goalsLoad] = await Promise.all([
+  const [career, goalsLoad, completedStages] = await Promise.all([
     loadStudentCareerSnapshot(client, studentId),
     loadStudentGoalsContext(client, studentId),
+    loadCompletedCareerStages(client, studentId),
   ]);
 
   let targetUniversities: StudentCareerInsightForTeacher['targetUniversities'] =
@@ -84,42 +96,38 @@ export async function loadStudentCareerInsightForTeacher(
       }));
   }
 
+  const progress = computeCareerProgress(completedStages);
+
   if (!career.hasAssessment) {
-    return { ...empty, targetUniversities };
+    return { ...empty, targetUniversities, progressPercent: progress.percent };
   }
+
+  const rows = await fetchCareerAssessmentRowsForUser(client, studentId);
+  const matrices = rows
+    .map((row) => {
+      const normalized = normalizeCareerAssessmentRow(row);
+      return (
+        parseAssessmentScoreMatrix(normalized.scoresRaw) ??
+        (normalized.hollandCodeFallback
+          ? minimalAssessmentMatrixFromHolland(normalized.hollandCodeFallback)
+          : null)
+      );
+    })
+    .filter((matrix): matrix is NonNullable<typeof matrix> => matrix !== null);
+
+  const mergedScores =
+    matrices.length > 0 ? mergeAssessmentScoreMatrices(matrices) : null;
 
   const cognitiveHighlights: string[] = [];
-  let rawRow: CareerAssessmentDbRow | null = null;
-
-  const live = await client
-    .from('career_assessments')
-    .select(CAREER_ASSESSMENT_USER_SELECT)
-    .eq('user_id', studentId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  rawRow = (live.data ?? null) as CareerAssessmentDbRow | null;
-
-  if (!rawRow && live.error?.code === '42703') {
-    const legacy = await client
-      .from('career_assessments')
-      .select('score_matrix')
-      .eq('user_id', studentId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    rawRow = (legacy.data ?? null) as CareerAssessmentDbRow | null;
-  }
-
-  const normalized = rawRow ? normalizeCareerAssessmentRow(rawRow) : null;
-  const scores = parseAssessmentScoreMatrix(normalized?.scoresRaw);
-  if (scores) {
+  if (mergedScores) {
     const ranked = [...COGNITIVE_KEYS].sort(
-      (a, b) => scores.cognitive[b].percent - scores.cognitive[a].percent,
+      (a, b) =>
+        mergedScores.cognitive[b].percent - mergedScores.cognitive[a].percent,
     );
     for (const key of ranked.slice(0, 3)) {
-      cognitiveHighlights.push(COGNITIVE_LABELS[key]);
+      if (mergedScores.cognitive[key].percent > 0) {
+        cognitiveHighlights.push(COGNITIVE_LABELS[key]);
+      }
     }
   }
 
@@ -129,8 +137,8 @@ export async function loadStudentCareerInsightForTeacher(
           primaryMajors: career.primaryMajors,
           secondaryMajors: career.secondaryMajors,
         }
-      : scores
-        ? suggestTieredMajors(scores.topRiasec)
+      : mergedScores
+        ? suggestTieredMajors(mergedScores.topRiasec)
         : { primaryMajors: [], secondaryMajors: [] };
 
   return {
@@ -141,10 +149,11 @@ export async function loadStudentCareerInsightForTeacher(
     topTraits:
       career.topTraits.length > 0
         ? career.topTraits
-        : scores
-          ? extractTopStrengthTraits(scores)
+        : mergedScores
+          ? extractTopStrengthTraits(mergedScores)
           : [],
     cognitiveHighlights,
+    radarData: career.radarData,
     primaryMajors: tiered.primaryMajors,
     secondaryMajors: tiered.secondaryMajors,
     suggestedMajors: [
@@ -154,5 +163,6 @@ export async function loadStudentCareerInsightForTeacher(
     targetUniversities,
     aiInterpretation: career.aiInterpretation,
     assessedAt: career.assessedAt,
+    progressPercent: progress.percent,
   };
 }

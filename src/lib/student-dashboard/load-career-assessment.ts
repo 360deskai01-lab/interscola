@@ -1,5 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { mergeAssessmentScoreMatrices } from '@/lib/career-assessment/merge-scores';
+import {
+  mapDbTypeToStage,
+  type CareerCompassStageId,
+} from '@/lib/career-assessment/progress';
 import { suggestTieredMajors } from '@/lib/assessment/majors';
 import { riasecRadarData } from '@/lib/assessment/scoring';
 import type { StudentCareerSnapshot } from '@/lib/student-command-center/types';
@@ -11,17 +16,99 @@ import {
 } from '@/lib/student-dashboard/career-assessment-db';
 import {
   ASSESSMENT_KIND_PRIORITY,
+  extractHollandFromScoresRaw,
   extractTopStrengthTraits,
+  minimalAssessmentMatrixFromHolland,
   parseAssessmentScoreMatrix,
 } from '@/lib/student-dashboard/parse-score-matrix';
-import type { AssessmentKind } from '@/types/assessment';
+import type { AssessmentKind, AssessmentScoreMatrix } from '@/types/assessment';
 
 const LEGACY_CAREER_ASSESSMENT_SELECT =
-  'id, assessment_kind, score_matrix, holland_code, ai_report, created_at';
+  'id, assessment_kind, score_matrix, holland_code, ai_report, top_traits, created_at';
 
-function pickPreferredAssessment(
+const CAREER_ASSESSMENT_USER_SELECT_NO_HOLLAND =
+  'id, assessment_type, scores, top_traits, ai_interpretation, created_at';
+
+export async function fetchCareerAssessmentRowsForUser(
+  client: SupabaseClient,
+  userId: string,
+): Promise<CareerAssessmentDbRow[]> {
+  const live = await client
+    .from('career_assessments')
+    .select(CAREER_ASSESSMENT_USER_SELECT)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(24);
+
+  if (live.error?.code === '42703') {
+    const liveNoHolland = await client
+      .from('career_assessments')
+      .select(CAREER_ASSESSMENT_USER_SELECT_NO_HOLLAND)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(24);
+    if (!liveNoHolland.error) {
+      return (liveNoHolland.data ?? []) as CareerAssessmentDbRow[];
+    }
+  }
+
+  if (live.error?.code === '42703') {
+    const legacy = await client
+      .from('career_assessments')
+      .select(LEGACY_CAREER_ASSESSMENT_SELECT)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(24);
+    return (legacy.data ?? []) as CareerAssessmentDbRow[];
+  }
+
+  if (live.error) {
+    if (live.error.code !== '42P01') {
+      console.error(
+        '[student-dashboard] Kariyer kaydı okunamadı:',
+        live.error.message,
+      );
+    }
+    return [];
+  }
+
+  return (live.data ?? []) as CareerAssessmentDbRow[];
+}
+
+export async function loadCompletedCareerStages(
+  client: SupabaseClient,
+  userId: string,
+): Promise<Set<CareerCompassStageId>> {
+  const rows = await fetchCareerAssessmentRowsForUser(client, userId);
+  const completed = new Set<CareerCompassStageId>();
+  for (const row of rows) {
+    const norm = normalizeCareerAssessmentRow(row);
+    const stage = mapDbTypeToStage(norm.assessmentType);
+    if (stage) completed.add(stage);
+  }
+  return completed;
+}
+
+function parseRowToMatrix(
+  row: CareerAssessmentDbRow,
+): AssessmentScoreMatrix | null {
+  const normalized = normalizeCareerAssessmentRow(row);
+  const parsed = parseAssessmentScoreMatrix(normalized.scoresRaw);
+  if (parsed) return parsed;
+
+  if (normalized.hollandCodeFallback) {
+    return minimalAssessmentMatrixFromHolland(normalized.hollandCodeFallback);
+  }
+
+  return null;
+}
+
+function pickPreferredRowMeta(
   rows: CareerAssessmentDbRow[],
-): CareerAssessmentDbRow | null {
+): {
+  kind: AssessmentKind;
+  normalized: ReturnType<typeof normalizeCareerAssessmentRow>;
+} | null {
   if (rows.length === 0) return null;
 
   const sorted = [...rows].sort((a, b) => {
@@ -35,7 +122,52 @@ function pickPreferredAssessment(
     return Date.parse(normB.createdAt) - Date.parse(normA.createdAt);
   });
 
-  return sorted[0] ?? null;
+  const top = sorted[0];
+  if (!top) return null;
+  const normalized = normalizeCareerAssessmentRow(top);
+  const kind =
+    normalizeAssessmentType(normalized.assessmentType) ?? 'quick_combo';
+  return { kind, normalized };
+}
+
+function buildSnapshotFromScores(
+  scores: AssessmentScoreMatrix,
+  meta: {
+    kind: AssessmentKind;
+    normalized: ReturnType<typeof normalizeCareerAssessmentRow>;
+  },
+): StudentCareerSnapshot {
+  const hollandCode =
+    meta.normalized.hollandCodeFallback || scores.hollandCode || undefined;
+  const hollandTitle = scores.hollandTitle || hollandCode;
+
+  const topTraits =
+    meta.normalized.topTraits.length > 0
+      ? meta.normalized.topTraits
+      : extractTopStrengthTraits(scores);
+
+  const tiered = suggestTieredMajors(scores.topRiasec);
+
+  return {
+    hasAssessment: true,
+    assessmentKind: meta.kind,
+    hollandCode,
+    hollandTitle,
+    topTraits,
+    radarData: riasecRadarData(scores).map(({ axis, value }) => ({
+      axis,
+      value,
+    })),
+    aiInterpretation: meta.normalized.aiInterpretation,
+    assessedAt: meta.normalized.createdAt,
+    primaryMajors: tiered.primaryMajors,
+    secondaryMajors: tiered.secondaryMajors,
+    suggestedMajors: [
+      ...tiered.primaryMajors,
+      ...tiered.secondaryMajors,
+    ].map((m) => m.title),
+    pinnedUniversityNames: [],
+  };
 }
 
 export async function loadStudentCareerSnapshot(
@@ -52,82 +184,49 @@ export async function loadStudentCareerSnapshot(
     pinnedUniversityNames: [],
   };
 
-  let rows: CareerAssessmentDbRow[] | null = null;
-  let error: { code?: string; message: string } | null = null;
-
-  const live = await client
-    .from('career_assessments')
-    .select(CAREER_ASSESSMENT_USER_SELECT)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(12);
-
-  rows = (live.data ?? null) as CareerAssessmentDbRow[] | null;
-  error = live.error;
-
-  if (error?.code === '42703') {
-    const legacy = await client
-      .from('career_assessments')
-      .select(LEGACY_CAREER_ASSESSMENT_SELECT)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(12);
-    rows = (legacy.data ?? null) as CareerAssessmentDbRow[] | null;
-    error = legacy.error;
+  const rows = await fetchCareerAssessmentRowsForUser(client, userId);
+  if (rows.length === 0) {
+    return empty;
   }
 
-  if (error) {
-    if (error.code === '42P01') {
-      return empty;
+  const matrices: AssessmentScoreMatrix[] = [];
+  for (const row of rows) {
+    const matrix = parseRowToMatrix(row);
+    if (matrix) matrices.push(matrix);
+  }
+
+  const meta = pickPreferredRowMeta(rows);
+  if (!meta) {
+    return empty;
+  }
+
+  let scores: AssessmentScoreMatrix | null = null;
+  if (matrices.length > 0) {
+    scores = mergeAssessmentScoreMatrices(matrices);
+  }
+
+  if (!scores && meta.normalized.hollandCodeFallback) {
+    scores = minimalAssessmentMatrixFromHolland(
+      meta.normalized.hollandCodeFallback,
+    );
+  }
+
+  if (!scores) {
+    for (const row of rows) {
+      const normalized = normalizeCareerAssessmentRow(row);
+      const holland =
+        normalized.hollandCodeFallback ??
+        extractHollandFromScoresRaw(normalized.scoresRaw);
+      if (holland) {
+        scores = minimalAssessmentMatrixFromHolland(holland);
+        break;
+      }
     }
-    console.error('[student-dashboard] Kariyer kaydı okunamadı:', error.message);
-    return empty;
   }
 
-  const row = pickPreferredAssessment(rows ?? []);
-  if (!row) {
-    return empty;
-  }
-
-  const normalized = normalizeCareerAssessmentRow(row);
-  const scores = parseAssessmentScoreMatrix(normalized.scoresRaw);
   if (!scores) {
     return empty;
   }
 
-  const kind =
-    normalizeAssessmentType(normalized.assessmentType) ??
-    ('quick_combo' as AssessmentKind);
-
-  const hollandCode =
-    normalized.hollandCodeFallback || scores.hollandCode || undefined;
-  const hollandTitle = scores.hollandTitle || hollandCode;
-
-  const topTraits =
-    normalized.topTraits.length > 0
-      ? normalized.topTraits
-      : extractTopStrengthTraits(scores);
-
-  const tiered = suggestTieredMajors(scores.topRiasec);
-
-  return {
-    hasAssessment: true,
-    assessmentKind: kind,
-    hollandCode,
-    hollandTitle,
-    topTraits,
-    radarData: riasecRadarData(scores).map(({ axis, value }) => ({
-      axis,
-      value,
-    })),
-    aiInterpretation: normalized.aiInterpretation,
-    assessedAt: normalized.createdAt,
-    primaryMajors: tiered.primaryMajors,
-    secondaryMajors: tiered.secondaryMajors,
-    suggestedMajors: [
-      ...tiered.primaryMajors,
-      ...tiered.secondaryMajors,
-    ].map((m) => m.title),
-    pinnedUniversityNames: [],
-  };
+  return buildSnapshotFromScores(scores, meta);
 }

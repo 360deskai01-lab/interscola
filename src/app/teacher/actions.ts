@@ -8,7 +8,7 @@ import {
   type StudentAnalyticsData,
 } from '@/lib/student-analytics';
 import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
-import { loadStudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
+import { loadTeacherStudentCareerInsight } from '@/lib/teacher-dashboard/load-student-career';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
@@ -762,13 +762,7 @@ export async function getStudentCareerInsightForTeacherAction(
       return { success: false, error: link.error };
     }
 
-    const client = await getProfilesClient();
-    if (!client) {
-      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
-    }
-
-    const data = await loadStudentCareerInsightForTeacher(
-      client,
+    const data = await loadTeacherStudentCareerInsight(
       studentId.trim(),
       studentName,
     );

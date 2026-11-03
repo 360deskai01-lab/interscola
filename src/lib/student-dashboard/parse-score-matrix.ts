@@ -41,52 +41,135 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function coerceRawScores(raw: unknown): Record<string, unknown> | null {
+  if (isRecord(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return isRecord(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Tek boyut hücresi: kayıtta `percent` veya `sum`/`max` olabilir. */
+function parseScoreCell(cell: unknown): { percent: number; average: number } {
+  if (!isRecord(cell)) {
+    return { percent: 0, average: 0 };
+  }
+
+  const percentDirect =
+    typeof cell.percent === 'number'
+      ? cell.percent
+      : Number(cell.percent);
+  const averageDirect =
+    typeof cell.average === 'number'
+      ? cell.average
+      : Number(cell.average);
+
+  if (Number.isFinite(percentDirect)) {
+    return {
+      percent: Math.round(percentDirect),
+      average: Number.isFinite(averageDirect) ? averageDirect : 0,
+    };
+  }
+
+  const sum = typeof cell.sum === 'number' ? cell.sum : Number(cell.sum);
+  const max = typeof cell.max === 'number' ? cell.max : Number(cell.max);
+  const count =
+    typeof cell.count === 'number' ? cell.count : Number(cell.count);
+
+  if (Number.isFinite(sum) && Number.isFinite(max) && max > 0) {
+    const avg =
+      Number.isFinite(averageDirect) && averageDirect > 0
+        ? averageDirect
+        : Number.isFinite(count) && count > 0
+          ? sum / count
+          : 0;
+    return {
+      percent: Math.round((sum / max) * 100),
+      average: avg,
+    };
+  }
+
+  return { percent: 0, average: 0 };
+}
+
 function parseDimensionRecord<T extends string>(
   raw: unknown,
   keys: readonly T[],
-): Record<T, { percent: number; average: number }> | null {
-  if (!isRecord(raw)) return null;
+): Record<T, { percent: number; average: number }> {
+  const record = isRecord(raw) ? raw : {};
   const out = {} as Record<T, { percent: number; average: number }>;
   for (const key of keys) {
-    const cell = raw[key];
-    if (!isRecord(cell)) return null;
-    const percent =
-      typeof cell.percent === 'number' ? cell.percent : Number(cell.percent);
-    const average =
-      typeof cell.average === 'number' ? cell.average : Number(cell.average);
-    out[key] = {
-      percent: Number.isFinite(percent) ? percent : 0,
-      average: Number.isFinite(average) ? average : 0,
-    };
+    out[key] = parseScoreCell(record[key]);
   }
   return out;
 }
 
-/** DB `scores` / legacy `score_matrix` jsonb → tip güvenli matris (kısmi veride null). */
-export function parseAssessmentScoreMatrix(
-  raw: unknown,
-): AssessmentScoreMatrix | null {
-  if (!isRecord(raw)) return null;
+function dimensionHasSignal(
+  record: Record<string, { percent: number; average: number }>,
+): boolean {
+  return Object.values(record).some(
+    (cell) => cell.percent > 0 || cell.average > 0,
+  );
+}
 
-  const riasecPartial = parseDimensionRecord(raw.riasec, RIASEC_CODES);
-  const bigFivePartial = parseDimensionRecord(raw.bigFive, BIG_FIVE_KEYS);
-  const cognitivePartial = parseDimensionRecord(raw.cognitive, COGNITIVE_KEYS);
-  if (!riasecPartial || !bigFivePartial || !cognitivePartial) {
-    return null;
+/** Holland kodundan minimal radar (skor json bozuksa yedek). */
+export function minimalAssessmentMatrixFromHolland(
+  hollandCode: string,
+  hollandTitle?: string | null,
+): AssessmentScoreMatrix | null {
+  const letters = hollandCode
+    .toUpperCase()
+    .split('')
+    .filter((char): char is RiasecCode =>
+      (RIASEC_CODES as readonly string[]).includes(char),
+    );
+  const uniqueTop = [...new Set(letters)].slice(0, 3) as RiasecCode[];
+  if (uniqueTop.length === 0) return null;
+
+  const riasec = {} as AssessmentScoreMatrix['riasec'];
+  for (const code of RIASEC_CODES) {
+    const rank = uniqueTop.indexOf(code);
+    const percent = rank === 0 ? 85 : rank === 1 ? 70 : rank === 2 ? 58 : 25;
+    riasec[code] = {
+      sum: 0,
+      count: 0,
+      max: 0,
+      average: percent / 20,
+      percent,
+    };
   }
 
-  const hollandCode =
-    typeof raw.hollandCode === 'string' ? raw.hollandCode.trim() : '';
-  const hollandTitle =
-    typeof raw.hollandTitle === 'string' ? raw.hollandTitle.trim() : '';
-  const topRiasec = Array.isArray(raw.topRiasec)
-    ? raw.topRiasec.filter(
-        (item): item is RiasecCode =>
-          typeof item === 'string' &&
-          (RIASEC_CODES as readonly string[]).includes(item),
-      )
-    : [];
+  const emptyBigFive = parseDimensionRecord({}, BIG_FIVE_KEYS);
+  const emptyCognitive = parseDimensionRecord({}, COGNITIVE_KEYS);
 
+  const code = uniqueTop.join('');
+  const title =
+    hollandTitle?.trim() ||
+    `${code} — ${uniqueTop.map((letter) => RIASEC_LABELS[letter]).join(' · ')}`;
+
+  return buildMatrixFromParts(
+    riasec,
+    emptyBigFive,
+    emptyCognitive,
+    code,
+    title,
+    uniqueTop,
+  );
+}
+
+function buildMatrixFromParts(
+  riasecPartial: Record<RiasecCode, { percent: number; average: number }>,
+  bigFivePartial: Record<BigFiveKey, { percent: number; average: number }>,
+  cognitivePartial: Record<CognitiveKey, { percent: number; average: number }>,
+  hollandCode: string,
+  hollandTitle: string,
+  topRiasec: RiasecCode[],
+): AssessmentScoreMatrix {
   const fullRiasec = {} as AssessmentScoreMatrix['riasec'];
   for (const code of RIASEC_CODES) {
     const cell = riasecPartial[code];
@@ -131,6 +214,75 @@ export function parseAssessmentScoreMatrix(
     hollandTitle: hollandTitle || hollandCode,
     topRiasec: topRiasec.length > 0 ? topRiasec : RIASEC_CODES.slice(0, 3),
   };
+}
+
+/** Skor json içinden yalnızca Holland kodu (kısmi parse yedeği). */
+export function extractHollandFromScoresRaw(raw: unknown): string | null {
+  const obj = coerceRawScores(raw);
+  if (!obj) return null;
+  const code =
+    typeof obj.hollandCode === 'string'
+      ? obj.hollandCode.trim()
+      : typeof obj.holland_code === 'string'
+        ? obj.holland_code.trim()
+        : '';
+  if (!code || code === '—') return null;
+  return code;
+}
+
+/** DB `scores` / legacy `score_matrix` jsonb → tip güvenli matris. */
+export function parseAssessmentScoreMatrix(
+  raw: unknown,
+): AssessmentScoreMatrix | null {
+  const obj = coerceRawScores(raw);
+  if (!obj) return null;
+
+  const riasecPartial = parseDimensionRecord(obj.riasec ?? obj.RIASEC, RIASEC_CODES);
+  const bigFivePartial = parseDimensionRecord(
+    obj.bigFive ?? obj.big_five ?? obj.BIG_FIVE,
+    BIG_FIVE_KEYS,
+  );
+  const cognitivePartial = parseDimensionRecord(
+    obj.cognitive ?? obj.COGNITIVE,
+    COGNITIVE_KEYS,
+  );
+
+  const hollandCode =
+    typeof obj.hollandCode === 'string'
+      ? obj.hollandCode.trim()
+      : typeof obj.holland_code === 'string'
+        ? obj.holland_code.trim()
+        : '';
+  const hollandTitle =
+    typeof obj.hollandTitle === 'string'
+      ? obj.hollandTitle.trim()
+      : typeof obj.holland_title === 'string'
+        ? obj.holland_title.trim()
+        : '';
+  const topRiasec = Array.isArray(obj.topRiasec)
+    ? obj.topRiasec.filter(
+        (item): item is RiasecCode =>
+          typeof item === 'string' &&
+          (RIASEC_CODES as readonly string[]).includes(item),
+      )
+    : [];
+
+  const hasSignal =
+    dimensionHasSignal(riasecPartial) ||
+    dimensionHasSignal(bigFivePartial) ||
+    dimensionHasSignal(cognitivePartial) ||
+    Boolean(hollandCode);
+
+  if (!hasSignal) return null;
+
+  return buildMatrixFromParts(
+    riasecPartial,
+    bigFivePartial,
+    cognitivePartial,
+    hollandCode,
+    hollandTitle,
+    topRiasec,
+  );
 }
 
 export function extractTopStrengthTraits(

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { CareerRadarChart } from '@/components/student/CareerRadarChart';
 import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 
 export interface TeacherCareerInsightTarget {
@@ -135,11 +136,29 @@ export function TeacherStudentCareerInsightModal({
               ) : (
                 <>
                   <div className="rounded-xl border border-violet-400/25 bg-violet-500/10 p-4">
-                    <p className="text-xs text-violet-200">Holland profili</p>
-                    <p className="mt-1 font-semibold text-slate-50">
-                      {insight.hollandCode} — {insight.hollandTitle}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs text-violet-200">Holland profili</p>
+                        <p className="mt-1 font-semibold text-slate-50">
+                          {insight.hollandCode} — {insight.hollandTitle}
+                        </p>
+                      </div>
+                      {typeof insight.progressPercent === 'number' ? (
+                        <span className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/15 px-2 py-0.5 text-[10px] tabular-nums text-violet-100">
+                          Pusula %{insight.progressPercent}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
+
+                  {insight.radarData.length > 0 ? (
+                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                      <p className="mb-2 text-xs font-medium text-slate-500">
+                        RIASEC radar
+                      </p>
+                      <CareerRadarChart data={insight.radarData} />
+                    </div>
+                  ) : null}
 
                   {insight.topTraits.length > 0 ? (
                     <div>
