@@ -150,6 +150,66 @@ export async function saveCareerAssessmentAction(payload: {
   return { success: true, id: row.id };
 }
 
+export async function claimGuestAssessmentAction(
+  guestSessionId: string,
+): Promise<{ success: boolean; error?: string; claimedCount?: number }> {
+  const sessionUser = await getSessionUser();
+  if (!sessionUser) {
+    return { success: false, error: 'Bu işlem için oturum gerekli.' };
+  }
+
+  const guestId = guestSessionId.trim();
+  if (!guestId) {
+    return { success: false, error: 'Misafir oturum kimliği geçersiz.' };
+  }
+
+  const client = getSupabaseAdmin(PROFILES_SCHEMA);
+  if (!client) {
+    return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+  }
+
+  let claimedCount = 0;
+
+  const rpc = await client.rpc('claim_guest_career_assessment', {
+    p_guest_session_id: guestId,
+    p_user_id: sessionUser.id,
+  });
+
+  if (!rpc.error && typeof rpc.data === 'number') {
+    claimedCount = rpc.data;
+  } else {
+    if (rpc.error && rpc.error.code !== '42883') {
+      console.warn(
+        '[career-compass] claim RPC kullanılamadı, doğrudan güncelleme deneniyor:',
+        rpc.error.message,
+      );
+    }
+
+    const updated = await client
+      .from('career_assessments')
+      .update({
+        user_id: sessionUser.id,
+        guest_session_id: null,
+      })
+      .eq('guest_session_id', guestId)
+      .is('user_id', null)
+      .select('id');
+
+    if (updated.error) {
+      console.error('[career-compass] claimGuestAssessment:', updated.error.message);
+      return { success: false, error: 'Misafir envanter hesaba aktarılamadı.' };
+    }
+
+    claimedCount = updated.data?.length ?? 0;
+  }
+
+  revalidatePath('/student/dashboard');
+  revalidatePath('/teacher/dashboard');
+  revalidatePath('/career-compass');
+
+  return { success: true, claimedCount };
+}
+
 export async function getCareerCompassProgressAction(): Promise<{
   success: boolean;
   error?: string;

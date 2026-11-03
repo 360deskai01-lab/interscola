@@ -46,8 +46,10 @@ import type {
   LikertValue,
 } from '@/types/assessment';
 
-const GUEST_SESSION_KEY = 'interscola_career_guest_session_id';
-const GUEST_RESULT_KEY = 'interscola_career_quick_result';
+import {
+  GUEST_QUICK_RESULT_STORAGE_KEY,
+  GUEST_SESSION_STORAGE_KEY,
+} from '@/lib/career-assessment/guest-session';
 
 const LIKERT_LABELS: Record<LikertValue, string> = {
   1: 'Hiç bana göre değil',
@@ -65,13 +67,13 @@ interface CareerCompassClientProps {
 
 function ensureGuestSessionId(): string {
   if (typeof window === 'undefined') return '';
-  let id = window.localStorage.getItem(GUEST_SESSION_KEY);
+  let id = window.localStorage.getItem(GUEST_SESSION_STORAGE_KEY);
   if (!id) {
     id =
       typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : `guest-${Date.now()}`;
-    window.localStorage.setItem(GUEST_SESSION_KEY, id);
+    window.localStorage.setItem(GUEST_SESSION_STORAGE_KEY, id);
   }
   return id;
 }
@@ -290,7 +292,7 @@ function ResultsView({
               kayıtlı öğrencilere açılır.
             </p>
             <Link
-              href="/auth/register"
+              href="/auth/register?next=%2Fstudent%2Fdashboard"
               className="mt-4 inline-flex items-center gap-2 rounded-xl border border-indigo-400/50 bg-indigo-500/20 px-5 py-2.5 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/30"
             >
               Kayıt Ol ve Raporun Kilidini Aç
@@ -377,7 +379,7 @@ export default function CareerCompassClient({
       const guestSessionId = isLoggedIn ? null : ensureGuestSessionId();
       if (!isLoggedIn) {
         window.localStorage.setItem(
-          GUEST_RESULT_KEY,
+          GUEST_QUICK_RESULT_STORAGE_KEY,
           JSON.stringify({ kind, answers, scores: result }),
         );
       }
@@ -428,7 +430,7 @@ export default function CareerCompassClient({
   useEffect(() => {
     if (isLoggedIn) return;
     try {
-      const raw = window.localStorage.getItem(GUEST_RESULT_KEY);
+      const raw = window.localStorage.getItem(GUEST_QUICK_RESULT_STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as {
         scores?: AssessmentScoreMatrix;
@@ -532,7 +534,10 @@ export default function CareerCompassClient({
             ) : (
               <p className="text-center text-sm text-slate-500">
                 Derin RIASEC, Big Five ve Bilişsel testler için{' '}
-                <Link href="/auth/login" className="text-indigo-300 underline">
+                <Link
+                  href="/auth/login?next=%2Fstudent%2Fdashboard"
+                  className="text-indigo-300 underline"
+                >
                   giriş yapın
                 </Link>
                 .

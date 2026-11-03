@@ -31,6 +31,7 @@ import {
   startSmartDiagnosticSelfPacedExamFormAction,
 } from '@/app/student/public-library-actions';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
+import { ClaimGuestCareerAssessmentBridge } from '@/components/student/ClaimGuestCareerAssessmentBridge';
 import { StudentPanel } from '@/components/student/StudentPanel';
 
 export const instant = false;
@@ -177,6 +178,10 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             </span>
           </div>
         ) : null}
+
+        <ClaimGuestCareerAssessmentBridge
+          initialHasCareerAssessment={commandCenter.career.hasAssessment}
+        />
 
         <Suspense
           fallback={

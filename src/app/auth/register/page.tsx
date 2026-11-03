@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { Suspense, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { safeNextPath } from '@/lib/safe-next-path';
 import { motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -38,8 +39,24 @@ const CURRICULUM_OPTIONS: readonly CurriculumOption[] = [
   { code: 'CAIE', label: 'CAIE A-Level', icon: BookOpen },
 ];
 
-export default function RegisterPage(): ReactNode {
+function resolvePostRegisterDestination(
+  role: string | undefined,
+  nextPath: string | null,
+): string {
+  if (nextPath) return nextPath;
+  if (role === 'admin') return '/admin/dashboard';
+  if (role === 'teacher') return '/teacher/dashboard';
+  if (role === 'student') return '/student/dashboard';
+  return '/';
+}
+
+function RegisterPageContent(): ReactNode {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get('next'));
+  const loginHref = nextPath
+    ? `/auth/login?next=${encodeURIComponent(nextPath)}`
+    : '/auth/login';
 
   const [role, setRole] = useState<Role>('student');
 
@@ -144,8 +161,9 @@ export default function RegisterPage(): ReactNode {
         return;
       }
 
-      router.replace('/');
       router.refresh();
+      const roleMeta = data.user?.user_metadata?.role as string | undefined;
+      window.location.href = resolvePostRegisterDestination(roleMeta, nextPath);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -407,7 +425,7 @@ export default function RegisterPage(): ReactNode {
           <p className="mt-6 text-center text-sm text-slate-400">
             Zaten hesabın var mı?{' '}
             <Link
-              href="/auth/login"
+              href={loginHref}
               className="font-medium text-indigo-300 transition hover:text-indigo-200"
             >
               Giriş Yap
@@ -416,6 +434,20 @@ export default function RegisterPage(): ReactNode {
         </div>
       </motion.div>
     </main>
+  );
+}
+
+export default function RegisterPage(): ReactNode {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-dvh items-center justify-center bg-slate-950 text-sm text-slate-400">
+          Kayıt formu yükleniyor…
+        </main>
+      }
+    >
+      <RegisterPageContent />
+    </Suspense>
   );
 }
 
