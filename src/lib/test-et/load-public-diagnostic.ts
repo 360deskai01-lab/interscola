@@ -1,7 +1,23 @@
-import { assessmentPayloadFromJsonb } from '@/lib/assessment-payload';
+import {
+  CAIE_ANDRADE_DIAGNOSTIC_EXAM,
+  CAIE_ANDRADE_LIBRARY_TITLE,
+  CAIE_ANDRADE_SEED_LIBRARY_ID,
+} from '@/lib/test-et/caie-andrade-seed';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { resolveDiagnosticLibrary } from '@/lib/test-et/resolve-diagnostic-library';
 import type { CurriculumCode } from '@/types/exam';
+
+function caiePreviewFallback(): PublicDiagnosticPreview {
+  return {
+    libraryId: CAIE_ANDRADE_SEED_LIBRARY_ID,
+    title: CAIE_ANDRADE_LIBRARY_TITLE,
+    curriculum: 'CAIE',
+    subject: CAIE_ANDRADE_DIAGNOSTIC_EXAM.subject,
+    durationMinutes: CAIE_ANDRADE_DIAGNOSTIC_EXAM.durationMinutes,
+    source: 'static_fallback',
+  };
+}
 
 export type PublicDiagnosticPreview = {
   libraryId: string;
@@ -9,6 +25,7 @@ export type PublicDiagnosticPreview = {
   curriculum: CurriculumCode;
   subject: string | null;
   durationMinutes: number;
+  source: 'database' | 'static_fallback';
 };
 
 async function getLibrariesReadClient() {
@@ -24,54 +41,32 @@ export async function loadPublicDiagnosticPreview(
   curriculum: CurriculumCode,
 ): Promise<PublicDiagnosticPreview | null> {
   const client = await getLibrariesReadClient();
-  if (!client) return null;
+  if (!client) {
+    return curriculum === 'CAIE' ? caiePreviewFallback() : null;
+  }
 
-  const { data, error } = await client
-    .from('libraries')
-    .select('id, title, curriculum, subject, exam_payload')
-    .eq('is_public', true)
-    .eq('verification_status', 'verified')
-    .eq('curriculum', curriculum)
-    .not('exam_payload', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const resolved = await resolveDiagnosticLibrary(client, curriculum);
+    const durationMinutes =
+      resolved.exam.durationMinutes > 0 ? resolved.exam.durationMinutes : 15;
 
-  if (error || !data) {
-    if (error) {
-      console.warn(
-        '[test-et] Açık teşhis materyali okunamadı:',
-        curriculum,
-        error.message,
-      );
+    return {
+      libraryId: resolved.id,
+      title: resolved.title,
+      curriculum: resolved.curriculum,
+      subject: resolved.subject,
+      durationMinutes,
+      source: resolved.source,
+    };
+  } catch (error) {
+    console.warn(
+      '[test-et] Açık teşhis materyali okunamadı:',
+      curriculum,
+      error instanceof Error ? error.message : String(error),
+    );
+    if (curriculum === 'CAIE') {
+      return caiePreviewFallback();
     }
     return null;
   }
-
-  const row = data as {
-    id: string;
-    title: string;
-    curriculum: string;
-    subject: string | null;
-    exam_payload: unknown;
-  };
-
-  const exam = assessmentPayloadFromJsonb(row.exam_payload);
-  const durationMinutes =
-    exam?.durationMinutes && exam.durationMinutes > 0
-      ? exam.durationMinutes
-      : 15;
-
-  const code = row.curriculum.trim().toUpperCase();
-  if (code !== 'SAT' && code !== 'IELTS' && code !== 'CAIE') {
-    return null;
-  }
-
-  return {
-    libraryId: row.id,
-    title: row.title,
-    curriculum: code,
-    subject: row.subject,
-    durationMinutes,
-  };
 }

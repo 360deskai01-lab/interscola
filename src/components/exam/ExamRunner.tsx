@@ -150,6 +150,7 @@ interface ExamRunnerProps {
   onAnswer: (questionId: string, answer: string) => void;
   onNavigate: (index: number) => void;
   onFinish: () => void;
+  finishLabel?: string;
 }
 
 /**
@@ -170,6 +171,7 @@ export function ExamRunner({
   onAnswer,
   onNavigate,
   onFinish,
+  finishLabel = 'Sınavı bitir',
 }: ExamRunnerProps): ReactNode {
   const isOpenResponse =
     question.type === 'structured_text' || question.type === 'extended_essay';
@@ -322,7 +324,7 @@ export function ExamRunner({
               className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronsRight className="size-4" />
-              Sınavı bitir
+              {finishLabel}
             </motion.button>
           )}
         </div>

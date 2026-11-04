@@ -14,6 +14,7 @@ import {
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { isLibraryId } from '@/lib/uuid-patterns';
+import { resolveDiagnosticLibrary } from '@/lib/test-et/resolve-diagnostic-library';
 import type { AssessmentPayload, CurriculumCode } from '@/types/exam';
 
 const ALLOWED_CURRICULA = new Set(['SAT', 'IELTS', 'CAIE']);
@@ -247,9 +248,6 @@ async function loadVerifiedPublicLibrary(
   };
 }
 
-const SEEDED_LIBRARY_SELECT =
-  'id, title, curriculum, subject, extracted_text, exam_payload';
-
 type SeededDiagnosticLibraryRow = PublicLibraryExamSource & { id: string };
 
 async function findSeededDiagnosticLibrary(
@@ -264,91 +262,34 @@ async function findSeededDiagnosticLibrary(
     return { ok: false, error: 'Geçersiz hedef sınav.' };
   }
 
-  const { data: primary, error: primaryError } = await client
-    .from('libraries')
-    .select(SEEDED_LIBRARY_SELECT)
-    .eq('is_public', true)
-    .eq('verification_status', 'verified')
-    .eq('curriculum', code)
-    .not('exam_payload', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (primaryError && isMissingPublicLibraryColumnError(primaryError)) {
+  try {
+    const resolved = await resolveDiagnosticLibrary(
+      client,
+      code as CurriculumCode,
+    );
+    return {
+      ok: true,
+      row: {
+        id: resolved.id,
+        title: resolved.title,
+        curriculum: resolved.curriculum,
+        subject: resolved.subject,
+        extracted_text: resolved.extracted_text,
+        exam_payload: resolved.exam,
+      },
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Teşhis materyali yüklenemedi.';
+    console.error('[public-library] Teşhis materyali çözülemedi:', message);
     return {
       ok: false,
       error:
-        'Henüz doğrulanmış açık teşhis materyali yok. Kısa süre sonra tekrar deneyin.',
+        code === 'CAIE'
+          ? 'A-Level teşhis materyali yüklenemedi. Lütfen tekrar deneyin.'
+          : message,
     };
   }
-
-  if (primaryError) {
-    console.error(
-      '[public-library] Teşhis materyali aranırken hata:',
-      primaryError.message,
-    );
-    return { ok: false, error: 'Teşhis materyali yüklenemedi.' };
-  }
-
-  const pickRow = async (
-    row: typeof primary,
-  ): Promise<SeededDiagnosticLibraryRow | null> => {
-    if (!row) return null;
-    const parsed = row as {
-      id: string;
-      title: string;
-      curriculum: string;
-      subject: string | null;
-      extracted_text: string | null;
-      exam_payload: unknown;
-    };
-    const exam = assessmentPayloadFromJsonb(parsed.exam_payload);
-    if (!exam) return null;
-    return {
-      id: parsed.id,
-      title: parsed.title,
-      curriculum: parsed.curriculum,
-      subject: parsed.subject,
-      extracted_text: parsed.extracted_text,
-      exam_payload: exam,
-    };
-  };
-
-  const primaryRow = await pickRow(primary);
-  if (primaryRow) {
-    return { ok: true, row: primaryRow };
-  }
-
-  const { data: satFallback, error: satError } = await client
-    .from('libraries')
-    .select(SEEDED_LIBRARY_SELECT)
-    .eq('is_public', true)
-    .eq('verification_status', 'verified')
-    .eq('curriculum', 'SAT')
-    .not('exam_payload', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (satError) {
-    console.error(
-      '[public-library] SAT teşhis yedeği aranırken hata:',
-      satError.message,
-    );
-    return { ok: false, error: 'Teşhis materyali yüklenemedi.' };
-  }
-
-  const satRow = await pickRow(satFallback);
-  if (satRow) {
-    return { ok: true, row: satRow };
-  }
-
-  return {
-    ok: false,
-    error:
-      'Henüz doğrulanmış açık teşhis materyali yok. Aşağıdaki hazır denemelerden birini seçebilirsin.',
-  };
 }
 
 /**

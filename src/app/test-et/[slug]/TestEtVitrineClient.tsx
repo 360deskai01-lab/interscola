@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Clock, Loader2, Sparkles, Target } from 'lucide-react';
 import { useState, useTransition, type ReactNode } from 'react';
@@ -11,10 +10,6 @@ import {
   testEtHref,
   type TestEtVitrineContent,
 } from '@/lib/test-et/test-et-config';
-import {
-  loginUrlWithNext,
-  registerUrlWithNext,
-} from '@/lib/safe-next-path';
 import type { CurriculumCode } from '@/types/exam';
 import { FadeInSection } from '@/components/vitrine/FadeInSection';
 
@@ -34,9 +29,6 @@ export function TestEtVitrineClient({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [authGateOpen, setAuthGateOpen] = useState(false);
-
-  const returnPath = testEtHref(content.slug);
 
   function handleStart() {
     if (!diagnostic) {
@@ -45,7 +37,11 @@ export function TestEtVitrineClient({
     }
 
     setError(null);
-    setAuthGateOpen(false);
+
+    if (!isApprovedStudent) {
+      router.push(`${testEtHref(content.slug)}/solve`);
+      return;
+    }
 
     startTransition(async () => {
       const result = await startTestEtDiagnosticAction(curriculum);
@@ -53,16 +49,6 @@ export function TestEtVitrineClient({
         router.push(`/exam-session/${result.assignmentId}`);
         return;
       }
-
-      if (result.needsAuth) {
-        setAuthGateOpen(true);
-        setError(
-          result.error ??
-            'Teşhise başlamak için ücretsiz öğrenci hesabı ile giriş yapmanız gerekir.',
-        );
-        return;
-      }
-
       setError(result.error ?? 'Teşhis sınavı başlatılamadı.');
     });
   }
@@ -152,11 +138,11 @@ export function TestEtVitrineClient({
           </button>
           {isApprovedStudent ? (
             <p className="text-xs text-emerald-300/90">
-              Oturumunuz hazır — sonuçlar panelinize kaydedilir.
+              Oturumunuz hazır — tam motor & panel kaydı için exam-session açılır.
             </p>
           ) : (
             <p className="text-xs text-slate-500">
-              Misafirler hızlı kayıt / giriş sonrası aynı ekrandan devam eder.
+              Üyelik gerekmez — hemen çözün, tahmini skorunuzu görün, detay için kayıt olun.
             </p>
           )}
         </div>
@@ -168,25 +154,7 @@ export function TestEtVitrineClient({
           className="mx-auto flex max-w-lg items-start gap-2 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100"
         >
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <div className="space-y-2 text-left">
-            <p>{error}</p>
-            {authGateOpen ? (
-              <div className="flex flex-wrap gap-2 pt-1">
-                <Link
-                  href={loginUrlWithNext(returnPath)}
-                  className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/15"
-                >
-                  Giriş yap
-                </Link>
-                <Link
-                  href={registerUrlWithNext(returnPath)}
-                  className="rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 py-1.5 text-xs font-semibold text-indigo-100 hover:bg-indigo-500/30"
-                >
-                  Ücretsiz kayıt ol
-                </Link>
-              </div>
-            ) : null}
-          </div>
+          <p>{error}</p>
         </div>
       ) : null}
     </div>

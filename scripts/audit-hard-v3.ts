@@ -30,6 +30,9 @@ import {
   solutionsTabHref,
 } from '../src/lib/solutions/solution-tabs';
 import { TEST_LINKS } from '../src/components/navigation/nav-config';
+import { CAIE_ANDRADE_DIAGNOSTIC_EXAM } from '../src/lib/test-et/caie-andrade-seed';
+import { scoreGuestDiagnostic } from '../src/lib/test-et/guest-diagnostic-scoring';
+import { GUEST_DIAGNOSTIC_STORAGE_KEY } from '../src/lib/test-et/guest-diagnostic-storage';
 import {
   TEST_ET_SLUGS,
   TEST_ET_VITRINE,
@@ -357,6 +360,78 @@ function runGroup5TestEtVitrine(): void {
       link?.href === testEtHref(expected.slug),
     );
   }
+
+  assert(
+    'CAIE Andrade statik fallback: curriculum CAIE',
+    CAIE_ANDRADE_DIAGNOSTIC_EXAM.curriculum === 'CAIE',
+  );
+  assert(
+    'CAIE Andrade statik fallback: exam_payload soruları',
+    CAIE_ANDRADE_DIAGNOSTIC_EXAM.questions.length >= 3,
+  );
+  assert(
+    'a-level slug → CAIE müfredat',
+    curriculumForTestEtSlug('a-level') === 'CAIE',
+  );
+
+  assert(
+    'GUEST_DIAGNOSTIC_STORAGE_KEY sabiti',
+    GUEST_DIAGNOSTIC_STORAGE_KEY === 'interscola_guest_diagnostic',
+  );
+
+  const satExam = {
+    curriculum: 'SAT' as const,
+    subject: 'Audit SAT',
+    title: 'Audit',
+    engineType: 'OBJECTIVE' as const,
+    durationMinutes: 15,
+    totalMarks: 2,
+    questions: [
+      {
+        id: 'q1',
+        questionNumber: 1,
+        type: 'multiple_choice' as const,
+        prompt: 'P',
+        options: ['A) 1', 'B) 2', 'C) 3', 'D) 4'],
+        correctAnswer: 'B',
+        targetMarks: 1,
+      },
+      {
+        id: 'q2',
+        questionNumber: 2,
+        type: 'multiple_choice' as const,
+        prompt: 'P2',
+        options: ['A) 1', 'B) 2', 'C) 3', 'D) 4'],
+        correctAnswer: 'A',
+        targetMarks: 1,
+      },
+    ],
+  };
+
+  const satScored = scoreGuestDiagnostic({
+    exam: satExam,
+    answers: { q1: 'B', q2: 'A' },
+    slug: 'sat',
+  });
+  assert(
+    'scoreGuestDiagnostic SAT: tam doğru → 1600',
+    satScored.headlineScore === '1600 / 1600',
+  );
+
+  const caieScored = scoreGuestDiagnostic({
+    exam: CAIE_ANDRADE_DIAGNOSTIC_EXAM,
+    answers: {
+      'caie-andrade-mcq1': 'B',
+      'caie-andrade-structured': 'Method one. Method two with enough words here.',
+      'caie-andrade-essay':
+        'Evaluation paragraph with sufficient length for partial credit scoring in guest mode.',
+    },
+    slug: 'a-level',
+  });
+  assert(
+    'scoreGuestDiagnostic CAIE: headline Grade',
+    caieScored.headlineScore.startsWith('Grade'),
+  );
 }
 
 function runGroup4CoreRegression(): void {

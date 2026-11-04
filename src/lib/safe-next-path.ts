@@ -27,3 +27,8 @@ export function registerUrlWithNext(nextPath: string): string {
   const safe = safeNextPath(nextPath) ?? '/student/dashboard';
   return `/auth/register?next=${encodeURIComponent(safe)}`;
 }
+
+export function registerUrlForDiagnostic(curriculum: string): string {
+  const code = curriculum.trim().toUpperCase();
+  return `/auth/register?source=diagnostic&curriculum=${encodeURIComponent(code)}`;
+}
