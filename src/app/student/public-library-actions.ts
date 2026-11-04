@@ -271,7 +271,6 @@ async function findSeededDiagnosticLibrary(
     .eq('verification_status', 'verified')
     .eq('curriculum', code)
     .not('exam_payload', 'is', null)
-    .ilike('title', '%Diagnostic%')
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();

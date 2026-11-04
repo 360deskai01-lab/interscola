@@ -58,12 +58,9 @@ export const TEST_LINKS: NavLinkItem[] = [
     description: 'RIASEC, çalışma stili ve bilişsel profil özeti',
     badge: 'Beta',
   },
-  { label: 'Digital SAT', href: '/sistem' },
-  { label: 'IELTS Academic', href: '/sistem' },
-  {
-    label: 'Cambridge CAIE A-Level',
-    href: '/student/dashboard?tab=explore',
-  },
+  { label: 'Digital SAT', href: '/test-et/sat' },
+  { label: 'IELTS Academic', href: '/test-et/ielts' },
+  { label: 'Cambridge CAIE A-Level', href: '/test-et/a-level' },
 ];
 
 export const PRIMARY_NAV_LINKS: NavLinkItem[] = [

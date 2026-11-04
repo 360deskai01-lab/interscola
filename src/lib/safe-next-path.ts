@@ -19,5 +19,11 @@ export const STUDENT_DIAGNOSTIC_EXPLORE_PATH =
 export const STUDENT_CAIE_EXPLORE_PATH = STUDENT_DIAGNOSTIC_EXPLORE_PATH;
 
 export function loginUrlWithNext(nextPath: string): string {
-  return `/auth/login?next=${encodeURIComponent(nextPath)}`;
+  const safe = safeNextPath(nextPath) ?? '/student/dashboard';
+  return `/auth/login?next=${encodeURIComponent(safe)}`;
+}
+
+export function registerUrlWithNext(nextPath: string): string {
+  const safe = safeNextPath(nextPath) ?? '/student/dashboard';
+  return `/auth/register?next=${encodeURIComponent(safe)}`;
 }

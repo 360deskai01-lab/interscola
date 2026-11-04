@@ -1,6 +1,6 @@
 /**
- * FAZ 1–4 — Hard Audit Harness 3.0
- * Vitrin hub, asistan, yardım merkezi ve çekirdek B2B/sınav sözleşmeleri (DB/HTTP yok).
+ * FAZ 1–4 + Test Et — Hard Audit Harness 3.1
+ * Vitrin hub, asistan, yardım merkezi, test-et slug sözleşmesi (DB/HTTP yok).
  */
 import {
   ADMIN_AVAILABLE_TIMES,
@@ -29,7 +29,16 @@ import {
   parseSolutionTab,
   solutionsTabHref,
 } from '../src/lib/solutions/solution-tabs';
-import type { AssessmentPayload } from '../src/types/exam';
+import { TEST_LINKS } from '../src/components/navigation/nav-config';
+import {
+  TEST_ET_SLUGS,
+  TEST_ET_VITRINE,
+  curriculumForTestEtSlug,
+  isTestEtSlug,
+  testEtHref,
+  type TestEtSlug,
+} from '../src/lib/test-et/test-et-config';
+import type { AssessmentPayload, CurriculumCode } from '../src/types/exam';
 
 let passed = 0;
 let failed = 0;
@@ -269,6 +278,87 @@ function runGroup3HelpCenter(): void {
   );
 }
 
+/** page.tsx ile aynı: geçersiz slug → notFound (404) yolu. */
+function resolveTestEtSlugForRoute(raw: string): TestEtSlug | null {
+  return isTestEtSlug(raw) ? raw : null;
+}
+
+function runGroup5TestEtVitrine(): void {
+  console.log('\n=== Grup 5: Test Et vitrin slug & curriculum eşleşmesi ===');
+
+  const slugCurriculum: Record<TestEtSlug, CurriculumCode> = {
+    sat: 'SAT',
+    ielts: 'IELTS',
+    'a-level': 'CAIE',
+  };
+
+  assert(
+    'TEST_ET_SLUGS: 3 resmi slug',
+    TEST_ET_SLUGS.length === 3,
+  );
+
+  for (const slug of TEST_ET_SLUGS) {
+    assert(
+      `curriculumForTestEtSlug: ${slug}`,
+      curriculumForTestEtSlug(slug) === slugCurriculum[slug],
+    );
+    assert(
+      `testEtHref: ${slug}`,
+      testEtHref(slug) === `/test-et/${slug}`,
+    );
+    assert(
+      `TEST_ET_VITRINE: ${slug} içerik`,
+      TEST_ET_VITRINE[slug].slug === slug &&
+        TEST_ET_VITRINE[slug].measuredSkills.length > 0,
+    );
+  }
+
+  const invalidSlugs = [
+    '',
+    'bilinmeyen',
+    'SAT',
+    'ielts-academic',
+    'a_level',
+    '../sat',
+    'sat/extra',
+  ];
+
+  for (const bad of invalidSlugs) {
+    assert(`isTestEtSlug reddi: "${bad}"`, !isTestEtSlug(bad));
+    assert(
+      `resolveTestEtSlugForRoute (404 yolu): "${bad}"`,
+      resolveTestEtSlugForRoute(bad) === null,
+    );
+  }
+
+  const navExamLinks = TEST_LINKS.filter((item) =>
+    item.href.startsWith('/test-et/'),
+  );
+
+  assert(
+    'TEST_LINKS: 3 test-et vitrin linki',
+    navExamLinks.length === 3,
+  );
+
+  const expectedNav: { label: string; slug: TestEtSlug }[] = [
+    { label: 'Digital SAT', slug: 'sat' },
+    { label: 'IELTS Academic', slug: 'ielts' },
+    { label: 'Cambridge CAIE A-Level', slug: 'a-level' },
+  ];
+
+  for (const expected of expectedNav) {
+    const link = TEST_LINKS.find((item) => item.label === expected.label);
+    assert(
+      `TEST_LINKS "${expected.label}" mevcut`,
+      Boolean(link),
+    );
+    assert(
+      `TEST_LINKS "${expected.label}" href`,
+      link?.href === testEtHref(expected.slug),
+    );
+  }
+}
+
 function runGroup4CoreRegression(): void {
   console.log('\n=== Grup 4: B2B & çekirdek kütüphane regresyonu ===');
 
@@ -333,13 +423,14 @@ function runGroup4CoreRegression(): void {
 }
 
 function main(): void {
-  console.log('Interscola Hard Audit Harness 3.0\n');
+  console.log('Interscola Hard Audit Harness 3.1\n');
 
   runGroup1AssistantScheduling();
   runGroup1AssistantKeywords();
   runGroup2SolutionTabs();
   runGroup3HelpCenter();
   runGroup4CoreRegression();
+  runGroup5TestEtVitrine();
 
   const total = passed + failed;
   console.log('\n--- Özet ---');
