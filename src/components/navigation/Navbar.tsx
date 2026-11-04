@@ -205,13 +205,23 @@ export function Navbar({
         >
           <Link
             href={NAV_INTERSCOLA_HREF}
-            className="rounded-lg px-2.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
+            aria-current={pathname.startsWith('/interscola') ? 'page' : undefined}
+            className={`rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+              pathname.startsWith('/interscola')
+                ? 'bg-indigo-500/15 text-indigo-100'
+                : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+            }`}
           >
             Interscola
           </Link>
           <Link
             href={NAV_SYSTEM_HREF}
-            className="rounded-lg px-2.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
+            aria-current={pathname.startsWith('/sistem') ? 'page' : undefined}
+            className={`rounded-lg px-2.5 py-2 text-sm font-medium transition ${
+              pathname.startsWith('/sistem')
+                ? 'bg-indigo-500/15 text-indigo-100'
+                : 'text-slate-300 hover:bg-white/[0.06] hover:text-white'
+            }`}
           >
             Sistem
           </Link>
@@ -223,7 +233,9 @@ export function Navbar({
                 (pathname === '/universities' ||
                   pathname.startsWith('/universities/'))) ||
               (item.href === '/career-compass' &&
-                pathname.startsWith('/career-compass'));
+                pathname.startsWith('/career-compass')) ||
+              (item.href === '/pricing' && pathname.startsWith('/pricing')) ||
+              (item.href === '/help' && pathname.startsWith('/help'));
             return (
               <Link
                 key={item.href}

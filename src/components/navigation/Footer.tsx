@@ -4,22 +4,19 @@ import Link from 'next/link';
 import { GraduationCap } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
-  NAV_HELP_HREF,
-  NAV_PRICING_HREF,
+  FOOTER_SUPPORT_LINKS,
+  FOOTER_VITRIN_LINKS,
+  NAV_CONTACT_HREF,
+  NAV_INTERSCOLA_HREF,
+  SOLUTIONS_LINKS,
   TEST_LINKS,
 } from '@/components/navigation/nav-config';
 
 const LEGAL_LINKS = [
-  { label: 'Gizlilik Politikası', href: '/#gizlilik' },
-  { label: 'Kullanım Şartları', href: '/#kullanim-sartlari' },
-  { label: 'Çerez Politikası', href: '/#cerez-politikasi' },
-  { label: 'İletişim', href: 'mailto:hello@interscola.com' },
-] as const;
-
-const SOLUTIONS_FOOTER = [
-  { label: 'Öğrenciler', href: '/auth/register' },
-  { label: 'Danışmanlar', href: '/auth/register' },
-  { label: 'Okul & Kurs Lisansları', href: '/#cozumler-kurum' },
+  { label: 'Gizlilik Politikası', href: '#gizlilik' },
+  { label: 'Kullanım Şartları', href: '#kullanim-sartlari' },
+  { label: 'Çerez Politikası', href: '#cerez-politikasi' },
+  { label: 'İletişim', href: NAV_CONTACT_HREF },
 ] as const;
 
 function FooterColumn({
@@ -61,7 +58,10 @@ export function Footer(): ReactNode {
     <footer className="mt-16 border-t border-white/10 pt-12">
       <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
         <FooterColumn title="Interscola">
-          <Link href="/#interscola" className="inline-flex items-center gap-2">
+          <Link
+            href={NAV_INTERSCOLA_HREF}
+            className="inline-flex items-center gap-2"
+          >
             <span className="grid size-9 place-items-center rounded-lg border border-indigo-400/30 bg-indigo-500/10">
               <GraduationCap className="size-5 text-indigo-200" />
             </span>
@@ -73,6 +73,11 @@ export function Footer(): ReactNode {
             Uluslararası sınav hazırlığında bilişsel değerlendirme ve üniversite
             kabul eşleştirmesi — tek platform.
           </p>
+          {FOOTER_VITRIN_LINKS.map((link) => (
+            <FooterLink key={link.href} href={link.href}>
+              {link.label}
+            </FooterLink>
+          ))}
           <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200">
             <span
               className="size-2 rounded-full bg-emerald-400"
@@ -96,17 +101,20 @@ export function Footer(): ReactNode {
         </FooterColumn>
 
         <FooterColumn title="Çözümler">
-          {SOLUTIONS_FOOTER.map((link) => (
-            <FooterLink key={link.label} href={link.href}>
+          {SOLUTIONS_LINKS.map((link) => (
+            <FooterLink key={link.href} href={link.href}>
               {link.label}
             </FooterLink>
           ))}
-          <FooterLink href="/#cozumler-veli">Veli</FooterLink>
-          <FooterLink href={NAV_PRICING_HREF}>Paketler</FooterLink>
-          <FooterLink href={NAV_HELP_HREF}>Yardım & SSS</FooterLink>
+          {FOOTER_SUPPORT_LINKS.map((link) => (
+            <FooterLink key={link.href} href={link.href}>
+              {link.label}
+            </FooterLink>
+          ))}
         </FooterColumn>
 
         <FooterColumn title="Kurumsal & Yasal">
+          <FooterLink href="/universities">Üniversiteler</FooterLink>
           {LEGAL_LINKS.map((link) => (
             <FooterLink key={link.label} href={link.href}>
               {link.label}
@@ -117,13 +125,6 @@ export function Footer(): ReactNode {
           <span id="cerez-politikasi" className="sr-only" />
         </FooterColumn>
       </div>
-
-      <div
-        id="pricing"
-        className="sr-only"
-        aria-hidden
-      />
-      <div id="yardim" className="sr-only" aria-hidden />
 
       <div className="mt-12 border-t border-white/10 pt-6 text-center text-xs leading-relaxed text-slate-600">
         <p>© 2026 Interscola Inc.</p>
