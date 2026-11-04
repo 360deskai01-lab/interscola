@@ -27,8 +27,6 @@ import {
   TEST_LINKS,
   type NavLinkItem,
 } from '@/components/navigation/nav-config';
-import { loginUrlWithNext } from '@/lib/safe-next-path';
-
 interface NavbarProps {
   auth: NavbarAuthSnapshot;
   authLoading?: boolean;
@@ -167,15 +165,6 @@ export function Navbar({
     };
   }, [mobileOpen]);
 
-  const caieExploreHref = loginUrlWithNext(
-    '/student/dashboard?tab=explore',
-  );
-  const testLinksResolved = TEST_LINKS.map((item) =>
-    item.label === 'Cambridge CAIE A-Level'
-      ? { ...item, href: auth.user ? item.href : caieExploreHref }
-      : item,
-  );
-
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
@@ -226,7 +215,7 @@ export function Navbar({
             Sistem
           </Link>
           <NavDropdown label="Çözümler" items={SOLUTIONS_LINKS} />
-          <NavDropdown label="Test Et" items={testLinksResolved} align="right" />
+          <NavDropdown label="Test Et" items={TEST_LINKS} align="right" />
           {PRIMARY_NAV_LINKS.map((item) => {
             const active =
               (item.href === '/universities' &&
@@ -345,7 +334,7 @@ export function Navbar({
               />
               <MobileNavSection
                 title="Test Et"
-                items={testLinksResolved}
+                items={TEST_LINKS}
                 onNavigate={closeMobile}
               />
             </div>

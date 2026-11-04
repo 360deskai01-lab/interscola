@@ -11,6 +11,9 @@ export const NAV_PRICING_HREF = '/pricing';
 export const NAV_HELP_HREF = '/help';
 export const NAV_CONTACT_HREF = '/contact';
 export const NAV_CAREER_COMPASS_HREF = '/career-compass';
+export const NAV_TEST_ET_SAT_HREF = '/test-et/sat';
+export const NAV_TEST_ET_IELTS_HREF = '/test-et/ielts';
+export const NAV_TEST_ET_A_LEVEL_HREF = '/test-et/a-level';
 
 export const SOLUTIONS_LINKS: NavLinkItem[] = [
   {
@@ -58,9 +61,9 @@ export const TEST_LINKS: NavLinkItem[] = [
     description: 'RIASEC, çalışma stili ve bilişsel profil özeti',
     badge: 'Beta',
   },
-  { label: 'Digital SAT', href: '/test-et/sat' },
-  { label: 'IELTS Academic', href: '/test-et/ielts' },
-  { label: 'Cambridge CAIE A-Level', href: '/test-et/a-level' },
+  { label: 'Digital SAT', href: NAV_TEST_ET_SAT_HREF },
+  { label: 'IELTS Academic', href: NAV_TEST_ET_IELTS_HREF },
+  { label: 'Cambridge CAIE A-Level', href: NAV_TEST_ET_A_LEVEL_HREF },
 ];
 
 export const PRIMARY_NAV_LINKS: NavLinkItem[] = [

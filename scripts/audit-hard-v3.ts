@@ -364,6 +364,11 @@ function runGroup5TestEtVitrine(): void {
   }
 
   assert(
+    'TEST_LINKS: dashboard explore href yok',
+    !TEST_LINKS.some((item) => item.href.includes('/student/dashboard')),
+  );
+
+  assert(
     'CAIE Andrade statik fallback: curriculum CAIE',
     CAIE_ANDRADE_DIAGNOSTIC_EXAM.curriculum === 'CAIE',
   );
