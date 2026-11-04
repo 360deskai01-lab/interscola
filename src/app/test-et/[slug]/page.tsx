@@ -7,7 +7,10 @@ import { TestEtVitrineClient } from '@/app/test-et/[slug]/TestEtVitrineClient';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { Footer } from '@/components/navigation/Footer';
 import { getCurrentProfile } from '@/lib/auth';
-import { loadPublicDiagnosticPreview } from '@/lib/test-et/load-public-diagnostic';
+import {
+  getCaiePublicDiagnosticPreviewFallback,
+  loadPublicDiagnosticPreview,
+} from '@/lib/test-et/load-public-diagnostic';
 import {
   TEST_ET_VITRINE,
   curriculumForTestEtSlug,
@@ -51,7 +54,10 @@ export default async function TestEtSlugPage({
 
   const content = TEST_ET_VITRINE[slug];
   const curriculum = curriculumForTestEtSlug(slug);
-  const diagnostic = await loadPublicDiagnosticPreview(curriculum);
+  let diagnostic = await loadPublicDiagnosticPreview(curriculum);
+  if (!diagnostic && slug === 'a-level') {
+    diagnostic = getCaiePublicDiagnosticPreviewFallback();
+  }
 
   const current = await getCurrentProfile();
   const isApprovedStudent =

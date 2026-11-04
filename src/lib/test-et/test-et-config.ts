@@ -8,19 +8,43 @@ export function isTestEtSlug(value: string): value is TestEtSlug {
   return (TEST_ET_SLUGS as readonly string[]).includes(value);
 }
 
+/** Tek doğru kaynak: slug ↔ müfredat (CAIE ↔ a-level). */
 export function curriculumForTestEtSlug(slug: TestEtSlug): CurriculumCode {
-  switch (slug) {
-    case 'sat':
-      return 'SAT';
-    case 'ielts':
-      return 'IELTS';
-    case 'a-level':
-      return 'CAIE';
-    default: {
-      const _exhaustive: never = slug;
-      return _exhaustive;
-    }
+  if (slug === 'a-level') {
+    return 'CAIE';
   }
+  if (slug === 'sat') {
+    return 'SAT';
+  }
+  if (slug === 'ielts') {
+    return 'IELTS';
+  }
+  const _exhaustive: never = slug;
+  return _exhaustive;
+}
+
+export function testEtSlugForCurriculum(
+  curriculum: CurriculumCode,
+): TestEtSlug | null {
+  if (curriculum === 'CAIE') {
+    return 'a-level';
+  }
+  if (curriculum === 'SAT') {
+    return 'sat';
+  }
+  if (curriculum === 'IELTS') {
+    return 'ielts';
+  }
+  return null;
+}
+
+export function isCaieTestEtContext(input: {
+  slug?: TestEtSlug | string;
+  curriculum?: CurriculumCode | string;
+}): boolean {
+  if (input.slug === 'a-level') return true;
+  const code = input.curriculum?.toString().trim().toUpperCase();
+  return code === 'CAIE' || code === 'A_LEVEL' || code === 'A-LEVEL';
 }
 
 export function testEtHref(slug: TestEtSlug): string {

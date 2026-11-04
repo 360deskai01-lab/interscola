@@ -37,6 +37,10 @@ async function getLibrariesReadClient() {
 /**
  * Vitrin sayfası: doğrulanmış açık teşhis materyali (en güncel `exam_payload`).
  */
+export function getCaiePublicDiagnosticPreviewFallback(): PublicDiagnosticPreview {
+  return caiePreviewFallback();
+}
+
 export async function loadPublicDiagnosticPreview(
   curriculum: CurriculumCode,
 ): Promise<PublicDiagnosticPreview | null> {

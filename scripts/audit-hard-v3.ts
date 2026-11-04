@@ -39,8 +39,10 @@ import {
   curriculumForTestEtSlug,
   isTestEtSlug,
   testEtHref,
+  testEtSlugForCurriculum,
   type TestEtSlug,
 } from '../src/lib/test-et/test-et-config';
+import { getCaieGuestExamFallback } from '../src/lib/test-et/load-guest-diagnostic-exam';
 import type { AssessmentPayload, CurriculumCode } from '../src/types/exam';
 
 let passed = 0;
@@ -372,6 +374,16 @@ function runGroup5TestEtVitrine(): void {
   assert(
     'a-level slug → CAIE müfredat',
     curriculumForTestEtSlug('a-level') === 'CAIE',
+  );
+  assert(
+    'CAIE müfredat → a-level slug',
+    testEtSlugForCurriculum('CAIE') === 'a-level',
+  );
+
+  assert(
+    'getCaieGuestExamFallback: Andrade payload',
+    getCaieGuestExamFallback().questions.length >= 3 &&
+      getCaieGuestExamFallback().curriculum === 'CAIE',
   );
 
   assert(

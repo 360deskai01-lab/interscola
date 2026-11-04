@@ -32,7 +32,7 @@ export default async function TestEtSolvePage({
   }
 
   const curriculum = curriculumForTestEtSlug(slug);
-  const exam = await loadGuestDiagnosticExam(curriculum);
+  const exam = await loadGuestDiagnosticExam({ slug, curriculum });
 
   if (!exam) {
     notFound();

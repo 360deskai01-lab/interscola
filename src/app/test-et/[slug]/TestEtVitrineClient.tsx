@@ -31,15 +31,15 @@ export function TestEtVitrineClient({
   const [error, setError] = useState<string | null>(null);
 
   function handleStart() {
-    if (!diagnostic) {
-      setError('Teşhis materyali henüz hazır değil. Lütfen kısa süre sonra tekrar deneyin.');
-      return;
-    }
-
     setError(null);
 
     if (!isApprovedStudent) {
       router.push(`${testEtHref(content.slug)}/solve`);
+      return;
+    }
+
+    if (!diagnostic) {
+      setError('Teşhis materyali henüz hazır değil. Lütfen kısa süre sonra tekrar deneyin.');
       return;
     }
 
@@ -127,7 +127,7 @@ export function TestEtVitrineClient({
         <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
           <button
             type="button"
-            disabled={pending || !diagnostic}
+            disabled={pending || (isApprovedStudent && !diagnostic)}
             onClick={handleStart}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:from-indigo-400 hover:to-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
