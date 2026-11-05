@@ -19,7 +19,7 @@ const ENGINE_TYPES: readonly EngineType[] = [
 const DEFAULT_QUESTION_COUNT = 2;
 const MIN_QUESTION_COUNT = 1;
 /** Token aşımı ve gecikmeyi önlemek için üst sınır. */
-const MAX_QUESTION_COUNT = 5;
+const MAX_QUESTION_COUNT = 12;
 
 /** OBJECTIVE sorularda beklenen şık sayısı. */
 const OBJECTIVE_OPTION_COUNT = 4;

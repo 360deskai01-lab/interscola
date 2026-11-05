@@ -27,12 +27,23 @@ import {
 } from '@/app/messages/actions';
 import {
   getPublicLibrariesAction,
+  startSelfPacedDiagnosticDrillFormAction,
   startSelfPacedExamFormAction,
   startSmartDiagnosticSelfPacedExamFormAction,
 } from '@/app/student/public-library-actions';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { ClaimGuestCareerAssessmentBridge } from '@/components/student/ClaimGuestCareerAssessmentBridge';
 import { StudentPanel } from '@/components/student/StudentPanel';
+import {
+  getStudentTranscriptAction,
+  saveStudentTranscriptAction,
+} from '@/app/student/transcript-actions';
+import {
+  getStudentActivitiesAction,
+  saveStudentActivitiesAction,
+} from '@/app/student/portfolio-actions';
+import { createEmptyAcademicTranscript } from '@/lib/student-transcript/types';
+import { createEmptyActivityPassport } from '@/lib/student-portfolio/types';
 
 export const instant = false;
 
@@ -74,6 +85,8 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     analyticsResult,
     publicLibrariesResult,
     commandCenterResult,
+    transcriptResult,
+    portfolioResult,
   ] = await Promise.all([
     getStudentTeachersAction(),
     getStudentAssignmentsAction(),
@@ -82,6 +95,8 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     getStudentAnalyticsAction(),
     getPublicLibrariesAction(),
     getStudentCommandCenterDataAction(),
+    getStudentTranscriptAction(),
+    getStudentActivitiesAction(),
   ]);
 
   const teachers = teachersResult.teachers ?? [];
@@ -114,11 +129,43 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
       secondaryMajors: [],
       suggestedMajors: [],
       pinnedUniversityNames: [],
+      inventoryTriad: {
+        cards: [],
+        synthesis: { primaryMajors: [], secondaryMajors: [] },
+        completedStageCount: 0,
+        totalStages: 3,
+        progressPercent: 0,
+      },
     },
     universityThresholds: [],
   };
   const commandCenter = commandCenterResult.data ?? emptyCommandCenter;
   const goalsContext = commandCenter.goals;
+  const academicTranscript =
+    transcriptResult.data ?? createEmptyAcademicTranscript();
+  const activityPassport =
+    portfolioResult.data ?? createEmptyActivityPassport();
+
+  const CURRICULUM_LABELS: Record<string, string> = {
+    SAT: 'Digital SAT',
+    IELTS: 'IELTS Academic',
+    CAIE: 'CAIE A-Level',
+  };
+  const graduationTrack =
+    curriculums.length > 0
+      ? curriculums
+          .map((code) => CURRICULUM_LABELS[code] ?? code)
+          .join(' · ')
+      : 'General Secondary';
+
+  const transcriptStudentIdentity = {
+    fullName:
+      current.profile.full_name?.trim() ||
+      current.user.email ||
+      'Student',
+    studentId: current.user.id,
+    graduationTrack,
+  };
 
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
@@ -128,7 +175,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
       />
 
       <NavbarServer />
-      <div className="relative mx-auto w-full max-w-5xl px-5 py-8 sm:px-8">
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-wrap items-center gap-4">
           <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow-lg shadow-sky-900/40">
@@ -162,7 +209,9 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
         !assignmentsResult.success ||
         !analyticsResult.success ||
         !publicLibrariesResult.success ||
-        !commandCenterResult.success ? (
+        !commandCenterResult.success ||
+        !transcriptResult.success ||
+        !portfolioResult.success ? (
           <div
             role="alert"
             className="mb-6 flex items-start gap-2.5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100"
@@ -174,6 +223,8 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
                 analyticsResult.error ??
                 publicLibrariesResult.error ??
                 commandCenterResult.error ??
+                transcriptResult.error ??
+                portfolioResult.error ??
                 'Panel verisi yüklenemedi.'}
             </span>
           </div>
@@ -206,8 +257,14 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             unreadByAssignment={unreadByAssignment}
             analytics={analytics}
             publicLibraries={publicLibraries}
-            onStartSelfPacedExam={startSelfPacedExamFormAction}
+            onStartMiniMock={startSelfPacedExamFormAction}
+            onStartDiagnosticDrill={startSelfPacedDiagnosticDrillFormAction}
             onStartDiagnosticExam={startSmartDiagnosticSelfPacedExamFormAction}
+            academicTranscript={academicTranscript}
+            transcriptStudentIdentity={transcriptStudentIdentity}
+            onSaveStudentTranscript={saveStudentTranscriptAction}
+            activityPassport={activityPassport}
+            onSaveStudentActivities={saveStudentActivitiesAction}
           />
         </Suspense>
 

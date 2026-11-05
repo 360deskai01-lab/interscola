@@ -63,7 +63,11 @@ function parseScoreCell(cell: unknown): { percent: number; average: number } {
   const percentDirect =
     typeof cell.percent === 'number'
       ? cell.percent
-      : Number(cell.percent);
+      : typeof cell.score === 'number'
+        ? cell.score
+        : typeof cell.value === 'number'
+          ? cell.value
+          : Number(cell.percent ?? cell.score ?? cell.value);
   const averageDirect =
     typeof cell.average === 'number'
       ? cell.average
@@ -71,7 +75,7 @@ function parseScoreCell(cell: unknown): { percent: number; average: number } {
 
   if (Number.isFinite(percentDirect)) {
     return {
-      percent: Math.round(percentDirect),
+      percent: clampStoredPercent(percentDirect),
       average: Number.isFinite(averageDirect) ? averageDirect : 0,
     };
   }
@@ -97,15 +101,145 @@ function parseScoreCell(cell: unknown): { percent: number; average: number } {
   return { percent: 0, average: 0 };
 }
 
+function clampStoredPercent(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function mergeScoreCell(
+  current: { percent: number; average: number },
+  incoming: { percent: number; average: number },
+): { percent: number; average: number } {
+  if (incoming.percent >= current.percent) {
+    return incoming;
+  }
+  return current;
+}
+
+/** JSON içinde skorlar farklı katmanlarda (scores, metric_breakdown) olabilir. */
+function flattenScoreSource(raw: unknown): Record<string, unknown> {
+  if (!isRecord(raw)) return {};
+  const flat: Record<string, unknown> = { ...raw };
+
+  const nestedKeys = [
+    'scores',
+    'score_matrix',
+    'scoreMatrix',
+    'metric_breakdown',
+    'metricBreakdown',
+    'dimensions',
+    'breakdown',
+  ] as const;
+
+  for (const key of nestedKeys) {
+    const nested = raw[key];
+    if (isRecord(nested)) {
+      Object.assign(flat, nested);
+    }
+  }
+
+  return flat;
+}
+
+const BIG_FIVE_ALIAS_TO_KEY: Record<string, BigFiveKey> = {
+  openness: 'openness',
+  Openness: 'openness',
+  discipline: 'discipline',
+  conscientiousness: 'discipline',
+  Conscientiousness: 'discipline',
+  conscientious: 'discipline',
+  focus: 'focus',
+  Focus: 'focus',
+  extraversion: 'extraversion',
+  Extraversion: 'extraversion',
+  agreeableness: 'extraversion',
+  Agreeableness: 'extraversion',
+  stress_tolerance: 'stress_tolerance',
+  stressTolerance: 'stress_tolerance',
+  neuroticism: 'stress_tolerance',
+  Neuroticism: 'stress_tolerance',
+};
+
+const COGNITIVE_ALIAS_TO_KEY: Record<string, CognitiveKey> = {
+  analytical: 'analytical',
+  Analytical: 'analytical',
+  strategic: 'strategic',
+  Strategic: 'strategic',
+  spatial: 'strategic',
+  Spatial: 'strategic',
+  focus_power: 'focus_power',
+  focusPower: 'focus_power',
+  working_memory: 'focus_power',
+  workingMemory: 'focus_power',
+  verbal: 'relational',
+  Verbal: 'relational',
+  relational: 'relational',
+  Relational: 'relational',
+};
+
 function parseDimensionRecord<T extends string>(
   raw: unknown,
   keys: readonly T[],
 ): Record<T, { percent: number; average: number }> {
-  const record = isRecord(raw) ? raw : {};
+  const record = flattenScoreSource(raw);
   const out = {} as Record<T, { percent: number; average: number }>;
   for (const key of keys) {
     out[key] = parseScoreCell(record[key]);
   }
+  return out;
+}
+
+function parseBigFiveFromSource(raw: unknown): Record<
+  BigFiveKey,
+  { percent: number; average: number }
+> {
+  const record = flattenScoreSource(raw);
+  const out = parseDimensionRecord({}, BIG_FIVE_KEYS);
+
+  for (const [alias, targetKey] of Object.entries(BIG_FIVE_ALIAS_TO_KEY)) {
+    if (!(alias in record)) continue;
+    let cell = parseScoreCell(record[alias]);
+    if (
+      alias === 'neuroticism' ||
+      alias === 'Neuroticism'
+    ) {
+      cell = {
+        ...cell,
+        percent: clampStoredPercent(100 - cell.percent),
+      };
+    }
+    out[targetKey] = mergeScoreCell(out[targetKey], cell);
+  }
+
+  for (const key of BIG_FIVE_KEYS) {
+    if (key in record) {
+      out[key] = mergeScoreCell(out[key], parseScoreCell(record[key]));
+    }
+  }
+
+  return out;
+}
+
+function parseCognitiveFromSource(raw: unknown): Record<
+  CognitiveKey,
+  { percent: number; average: number }
+> {
+  const record = flattenScoreSource(raw);
+  const out = parseDimensionRecord({}, COGNITIVE_KEYS);
+
+  for (const [alias, targetKey] of Object.entries(COGNITIVE_ALIAS_TO_KEY)) {
+    if (!(alias in record)) continue;
+    const cell = parseScoreCell(record[alias]);
+    out[targetKey] = mergeScoreCell(out[targetKey], cell);
+  }
+
+  for (const key of COGNITIVE_KEYS) {
+    if (key in record) {
+      out[key] = mergeScoreCell(out[key], parseScoreCell(record[key]));
+    }
+  }
+
   return out;
 }
 
@@ -237,15 +371,15 @@ export function parseAssessmentScoreMatrix(
   const obj = coerceRawScores(raw);
   if (!obj) return null;
 
-  const riasecPartial = parseDimensionRecord(obj.riasec ?? obj.RIASEC, RIASEC_CODES);
-  const bigFivePartial = parseDimensionRecord(
-    obj.bigFive ?? obj.big_five ?? obj.BIG_FIVE,
-    BIG_FIVE_KEYS,
+  const riasecPartial = parseDimensionRecord(
+    obj.riasec ?? obj.RIASEC,
+    RIASEC_CODES,
   );
-  const cognitivePartial = parseDimensionRecord(
-    obj.cognitive ?? obj.COGNITIVE,
-    COGNITIVE_KEYS,
-  );
+  const bigFiveSource =
+    obj.bigFive ?? obj.big_five ?? obj.BIG_FIVE ?? obj;
+  const cognitiveSource = obj.cognitive ?? obj.COGNITIVE ?? obj;
+  const bigFivePartial = parseBigFiveFromSource(bigFiveSource);
+  const cognitivePartial = parseCognitiveFromSource(cognitiveSource);
 
   const hollandCode =
     typeof obj.hollandCode === 'string'

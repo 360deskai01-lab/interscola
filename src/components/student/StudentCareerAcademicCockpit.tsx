@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { Building2, Compass, GraduationCap, Target } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { MajorMatchGroups } from '@/components/career/MajorMatchGroups';
-import { CareerRadarChart } from '@/components/student/CareerRadarChart';
+import { CareerHybridSynthesisCard } from '@/components/career/CareerHybridSynthesisCard';
+import { CareerInventoryTriad } from '@/components/career/CareerInventoryTriad';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 import type { UniversityThresholdProgress } from '@/lib/student-dashboard/university-threshold-progress';
 import {
@@ -15,6 +15,8 @@ import {
 
 interface StudentCareerAcademicCockpitProps {
   data: StudentCommandCenterData;
+  /** Sidebar: kariyer sekmesinde yalnızca envanter sütunu. */
+  view?: 'full' | 'career';
 }
 
 function ThresholdBar({
@@ -110,6 +112,7 @@ function UniversityThresholdCard({
 
 export function StudentCareerAcademicCockpit({
   data,
+  view = 'full',
 }: StudentCareerAcademicCockpitProps): ReactNode {
   const { goals, career, universityThresholds, recentScores, matchScores } =
     data;
@@ -149,7 +152,9 @@ export function StudentCareerAcademicCockpit({
         ) : null}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div
+        className={`grid gap-5 ${view === 'full' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}
+      >
         <div className="rounded-2xl border border-violet-400/20 bg-slate-950/50 p-4 sm:p-5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-200/90">
             <Compass className="size-3.5" />
@@ -179,15 +184,16 @@ export function StudentCareerAcademicCockpit({
                   ))}
                 </div>
               ) : null}
-              <CareerRadarChart data={career.radarData} />
-              {career.primaryMajors.length > 0 ||
-              career.secondaryMajors.length > 0 ? (
-                <MajorMatchGroups
-                  primaryMajors={career.primaryMajors}
-                  secondaryMajors={career.secondaryMajors}
-                  compact
-                />
-              ) : null}
+              <CareerInventoryTriad
+                cards={career.inventoryTriad.cards}
+                compact
+              />
+              <CareerHybridSynthesisCard
+                synthesis={career.inventoryTriad.synthesis}
+                progressPercent={career.inventoryTriad.progressPercent}
+                completedStageCount={career.inventoryTriad.completedStageCount}
+                totalStages={career.inventoryTriad.totalStages}
+              />
               {career.aiInterpretation ? (
                 <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">
                   {career.aiInterpretation}
@@ -220,6 +226,7 @@ export function StudentCareerAcademicCockpit({
           )}
         </div>
 
+        {view === 'career' ? null : (
         <div className="rounded-2xl border border-cyan-400/20 bg-slate-950/50 p-4 sm:p-5">
           <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-200/90">
             <GraduationCap className="size-3.5" />
@@ -283,6 +290,7 @@ export function StudentCareerAcademicCockpit({
             </Link>
           </p>
         </div>
+        )}
       </div>
     </section>
   );

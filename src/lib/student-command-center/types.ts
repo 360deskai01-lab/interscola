@@ -1,4 +1,5 @@
 import type { SampleMajorSuggestion } from '@/lib/assessment/majors';
+import type { CareerInventoryTriadBundle } from '@/lib/career-assessment/inventory-triad';
 import type { UniversityThresholdProgress } from '@/lib/student-dashboard/university-threshold-progress';
 import type { StudentGoalsContext } from '@/lib/student-profile/types';
 import type { AssessmentKind } from '@/types/assessment';
@@ -19,6 +20,8 @@ export interface StudentCareerSnapshot {
   /** Öğretmen özeti için düz liste (birincil + ikincil başlıklar) */
   suggestedMajors: string[];
   pinnedUniversityNames: string[];
+  /** 3 envanter kartı + 360° hibrit sentez (kümülatif merge matris). */
+  inventoryTriad: CareerInventoryTriadBundle;
 }
 
 export interface StudentCommandCenterData {

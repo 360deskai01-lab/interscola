@@ -137,11 +137,18 @@ export function calculateScores(
 export function riasecRadarData(
   scores: AssessmentScoreMatrix,
 ): { axis: string; value: number; letter: RiasecCode }[] {
-  return RIASEC_CODES.map((letter) => ({
-    letter,
-    axis: RIASEC_LABELS[letter],
-    value: scores.riasec[letter].percent,
-  }));
+  return RIASEC_CODES.map((letter) => {
+    const raw = scores.riasec[letter].percent;
+    const n = typeof raw === 'number' ? raw : Number(raw);
+    const value = Number.isFinite(n)
+      ? Math.min(100, Math.max(0, Math.round(n)))
+      : 0;
+    return {
+      letter,
+      axis: RIASEC_LABELS[letter],
+      value,
+    };
+  });
 }
 
 export { RIASEC_LABELS };

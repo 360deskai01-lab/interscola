@@ -1,0 +1,146 @@
+import { runGenerateExam } from '@/app/api/generate-exam/route';
+import { parseAssessmentPayload } from '@/lib/assessment-payload';
+import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
+import type { AssessmentPayload } from '@/types/exam';
+
+const POOL_SAT_QUESTIONS = 11;
+const POOL_IELTS_QUESTIONS = 2;
+
+function isoWeekLabel(date = new Date()): string {
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(
+    ((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return `${target.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function finalizePoolExam(
+  exam: AssessmentPayload,
+  curriculum: 'SAT' | 'IELTS',
+  weekLabel: string,
+): AssessmentPayload {
+  const validated = parseAssessmentPayload(exam);
+  return {
+    ...validated,
+    title: `✨ YENİ · Hazır Tam Deneme Havuzu — ${curriculum} (${weekLabel})`,
+    durationMinutes:
+      curriculum === 'SAT'
+        ? Math.max(validated.durationMinutes, 20)
+        : Math.max(validated.durationMinutes, 18),
+  };
+}
+
+async function insertPublicLibraryRow(input: {
+  title: string;
+  curriculum: 'SAT' | 'IELTS';
+  subject: string;
+  extractedText: string;
+  exam: AssessmentPayload;
+}): Promise<{ id: string } | { error: string }> {
+  const admin = getSupabaseAdmin(PROFILES_SCHEMA);
+  if (!admin) {
+    return { error: 'Supabase service role yapılandırılmamış.' };
+  }
+
+  const { data, error } = await admin
+    .from('libraries')
+    .insert({
+      title: input.title,
+      curriculum: input.curriculum,
+      subject: input.subject,
+      extracted_text: input.extractedText,
+      exam_payload: input.exam,
+      is_public: true,
+      verification_status: 'verified',
+      teacher_id: null,
+    })
+    .select('id')
+    .single();
+
+  if (error || !data) {
+    return {
+      error: error?.message ?? 'Kütüphane kaydı oluşturulamadı.',
+    };
+  }
+
+  return { id: (data as { id: string }).id };
+}
+
+export async function seedWeeklyPublicExams(): Promise<{
+  success: boolean;
+  seededCount: number;
+  examIds: string[];
+  errors: string[];
+}> {
+  const weekLabel = isoWeekLabel();
+  const examIds: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    const satRaw = await runGenerateExam({
+      curriculum: 'SAT',
+      engineType: 'OBJECTIVE',
+      subject: 'Reading & Writing / Math (balanced section practice)',
+      questionCount: POOL_SAT_QUESTIONS,
+      promptContext:
+        'Generate a balanced Digital SAT section-practice set: mix Reading & Writing and Math items in one cohesive mini mock (not a full Bluebook adaptive test).',
+    });
+    const satExam = finalizePoolExam(satRaw, 'SAT', weekLabel);
+    const satInsert = await insertPublicLibraryRow({
+      title: satExam.title,
+      curriculum: 'SAT',
+      subject: 'Reading & Writing / Math',
+      extractedText:
+        'Interscola haftalık hazır Digital SAT tam deneme havuzu — önceden üretilmiş exam_payload.',
+      exam: satExam,
+    });
+    if ('error' in satInsert) {
+      errors.push(`SAT: ${satInsert.error}`);
+    } else {
+      examIds.push(satInsert.id);
+    }
+  } catch (error) {
+    errors.push(
+      `SAT üretimi: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  try {
+    const ieltsRaw = await runGenerateExam({
+      curriculum: 'IELTS',
+      engineType: 'LANGUAGE',
+      subject: 'Academic Reading & Writing',
+      questionCount: POOL_IELTS_QUESTIONS,
+      promptContext:
+        'Generate IELTS Academic style tasks covering reading comprehension and Academic Writing Task 2 style response (indicator only, not official IELTS).',
+    });
+    const ieltsExam = finalizePoolExam(ieltsRaw, 'IELTS', weekLabel);
+    const ieltsInsert = await insertPublicLibraryRow({
+      title: ieltsExam.title,
+      curriculum: 'IELTS',
+      subject: 'Academic Reading & Writing',
+      extractedText:
+        'Interscola haftalık hazır IELTS Academic paketi — önceden üretilmiş exam_payload.',
+      exam: ieltsExam,
+    });
+    if ('error' in ieltsInsert) {
+      errors.push(`IELTS: ${ieltsInsert.error}`);
+    } else {
+      examIds.push(ieltsInsert.id);
+    }
+  } catch (error) {
+    errors.push(
+      `IELTS üretimi: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  return {
+    success: examIds.length > 0,
+    seededCount: examIds.length,
+    examIds,
+    errors,
+  };
+}

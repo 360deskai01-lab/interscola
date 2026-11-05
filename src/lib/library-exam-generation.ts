@@ -22,7 +22,7 @@ export const LIBRARY_EXAM_MODE: Record<
   SAT: {
     engineType: 'OBJECTIVE',
     defaultSubject: 'Reading & Writing',
-    maxQuestions: 5,
+    maxQuestions: 12,
   },
   IELTS: {
     engineType: 'LANGUAGE',

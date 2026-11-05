@@ -25,6 +25,11 @@ import type {
   NavbarStatus,
 } from '@/components/navigation/nav-auth.types';
 import { ExamCardList } from '@/components/exam/ExamCardList';
+import {
+  decorateExamForSessionFormat,
+  defaultQuestionCountForHome,
+  type ExamSessionFormatId,
+} from '@/lib/exam/exam-session-formats';
 import { HomeCompactHistory } from '@/components/home/HomeCompactHistory';
 import { HomeGuestVitrine } from '@/components/home/HomeGuestVitrine';
 import { HomeMemberWelcome } from '@/components/home/HomeMemberWelcome';
@@ -106,16 +111,20 @@ interface SessionResult {
 
 export interface HomePageClientProps {
   featuredUniversities?: University[];
+  recentPublicLibraries?: { id: string; title: string; createdAt: string }[];
 }
 
 export default function HomePageClient({
   featuredUniversities = [],
+  recentPublicLibraries = [],
 }: HomePageClientProps) {
   // Aşama
   const [phase, setPhase] = useState<Phase>('home');
 
   // Mod seçimi
   const [activeMode, setActiveMode] = useState<ExamMode | null>(null);
+  const [sessionFormat, setSessionFormat] =
+    useState<ExamSessionFormatId>('diagnostic_drill');
   const [subject, setSubject] = useState('');
   const [questionCount, setQuestionCount] = useState(2);
 
@@ -303,11 +312,28 @@ export default function HomePageClient({
 
   // --- Mod seçimi -----------------------------------------------------------
 
-  const selectMode = useCallback((mode: ExamMode) => {
-    setActiveMode(mode);
-    setSubject(mode.subjects[0]);
-    setQuestionCount(mode.defaultQuestions);
-  }, []);
+  const selectMode = useCallback(
+    (mode: ExamMode) => {
+      setActiveMode(mode);
+      setSubject(mode.subjects[0]);
+      setQuestionCount(
+        defaultQuestionCountForHome(sessionFormat, mode.curriculum),
+      );
+    },
+    [sessionFormat],
+  );
+
+  const selectSessionFormat = useCallback(
+    (format: ExamSessionFormatId) => {
+      setSessionFormat(format);
+      if (activeMode) {
+        setQuestionCount(
+          defaultQuestionCountForHome(format, activeMode.curriculum),
+        );
+      }
+    },
+    [activeMode],
+  );
 
   // --- Sınav üretimi --------------------------------------------------------
 
@@ -338,7 +364,12 @@ export default function HomePageClient({
           questionCount: count,
         });
 
-        const nextExam = pickExam(payload);
+        const rawExam = pickExam(payload);
+        const nextExam = decorateExamForSessionFormat(
+          rawExam,
+          sessionFormat,
+          mode.curriculum,
+        );
         setExam(nextExam);
         setAnswers({});
         setCurrentIndex(0);
@@ -357,7 +388,7 @@ export default function HomePageClient({
         setPhase('home');
       }
     },
-    [questionCount, subject],
+    [questionCount, sessionFormat, subject],
   );
 
   // --- Değerlendirme --------------------------------------------------------
@@ -593,16 +624,19 @@ export default function HomePageClient({
                     Hızlı teşhis — üç motoru dene
                   </h2>
                   <p className="mx-auto mt-2 max-w-xl text-sm text-slate-400">
-                    Kayıt olmadan kısa bir deneme başlatabilirsin; tam geçmiş
-                    ve portal için ücretsiz hesap aç.
+                    Diagnostic Drill veya Mini Deneme — resmi tam sınav değil;
+                    kayıt olmadan hızlı seviye göstergesi alabilirsin.
                   </p>
                 </div>
               ) : null}
               <ExamCardList
                 activeMode={activeMode}
+                sessionFormat={sessionFormat}
                 subject={subject}
                 questionCount={questionCount}
+                recentPublicLibraries={recentPublicLibraries}
                 onSelectMode={selectMode}
+                onSelectSessionFormat={selectSessionFormat}
                 onSelectSubject={setSubject}
                 onSelectQuestionCount={setQuestionCount}
                 onStart={(mode) => void startExam(mode)}

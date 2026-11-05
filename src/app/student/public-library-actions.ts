@@ -15,21 +15,14 @@ import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { isLibraryId } from '@/lib/uuid-patterns';
 import { resolveDiagnosticLibrary } from '@/lib/test-et/resolve-diagnostic-library';
+import {
+  decorateExamForSessionFormat,
+  questionCountForSessionFormat,
+  type ExamSessionFormatId,
+} from '@/lib/exam/exam-session-formats';
 import type { AssessmentPayload, CurriculumCode } from '@/types/exam';
 
 const ALLOWED_CURRICULA = new Set(['SAT', 'IELTS', 'CAIE']);
-
-const DIAGNOSTIC_QUESTIONS: Record<CurriculumCode, number> = {
-  SAT: 4,
-  IELTS: 1,
-  CAIE: 1,
-};
-
-const DEFAULT_PRACTICE_QUESTIONS: Record<CurriculumCode, number> = {
-  SAT: 4,
-  IELTS: 1,
-  CAIE: 1,
-};
 
 export interface PublicLibraryItem {
   id: string;
@@ -338,11 +331,18 @@ async function startSeededDiagnosticSelfPacedExam(
     return { success: true, assignmentId: inProgressId };
   }
 
+  const curriculum = primaryCurriculum.trim().toUpperCase() as CurriculumCode;
+  const decorated = decorateExamForSessionFormat(
+    exam,
+    'diagnostic_drill',
+    curriculum,
+  );
+
   const created = await insertNewSelfPacedAssignment(
     client,
     student.userId,
     row.id,
-    exam,
+    decorated,
   );
   if (!created.ok) {
     return { success: false, error: created.error };
@@ -485,7 +485,7 @@ async function insertNewSelfPacedAssignment(
 }
 
 type SelfPacedStartOptions = {
-  diagnostic?: boolean;
+  format?: ExamSessionFormatId;
 };
 
 /**
@@ -541,14 +541,22 @@ export async function startSelfPacedExamAction(
 
     const storedExam = assessmentPayloadFromJsonb(loaded.row.exam_payload);
     const curriculum = loaded.row.curriculum.trim().toUpperCase() as CurriculumCode;
-    const questionCount = options?.diagnostic
-      ? (DIAGNOSTIC_QUESTIONS[curriculum] ?? 1)
-      : (DEFAULT_PRACTICE_QUESTIONS[curriculum] ??
-        DEFAULT_PRACTICE_QUESTIONS.SAT);
+    const sessionFormat: ExamSessionFormatId =
+      options?.format ?? 'mini_mock';
+    const questionCount = questionCountForSessionFormat(
+      sessionFormat,
+      curriculum,
+    );
 
     let examPayload: AssessmentPayload;
 
-    if (storedExam) {
+    const poolReady =
+      storedExam &&
+      storedExam.questions.length > 0 &&
+      (storedExam.questions.length >= questionCount ||
+        storedExam.questions.length >= 10);
+
+    if (poolReady) {
       examPayload = storedExam;
     } else {
       const examResult = await resolveExamPayloadForLibrary(
@@ -564,13 +572,12 @@ export async function startSelfPacedExamAction(
       }
       examPayload = examResult.exam;
     }
-    if (options?.diagnostic) {
-      examPayload = {
-        ...examPayload,
-        durationMinutes:
-          examPayload.durationMinutes > 0 ? examPayload.durationMinutes : 15,
-      };
-    }
+
+    examPayload = decorateExamForSessionFormat(
+      examPayload,
+      sessionFormat,
+      curriculum,
+    );
 
     const created = await insertNewSelfPacedAssignment(
       client,
@@ -653,7 +660,17 @@ export async function startSelfPacedExamFormAction(
   error?: string;
   assignmentId?: string;
 }> {
-  return startSelfPacedExamAction(libraryId);
+  return startSelfPacedExamAction(libraryId, { format: 'mini_mock' });
+}
+
+export async function startSelfPacedDiagnosticDrillFormAction(
+  libraryId: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  assignmentId?: string;
+}> {
+  return startSelfPacedExamAction(libraryId, { format: 'diagnostic_drill' });
 }
 
 export async function startDiagnosticSelfPacedExamFormAction(

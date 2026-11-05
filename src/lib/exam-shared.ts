@@ -38,7 +38,7 @@ export const EXAM_MODES: readonly ExamMode[] = [
     label: 'IELTS Academic',
     tagline: 'Task 1 / Task 2',
     description:
-      'Akademik yazma görevi. Dört resmî kriter üzerinden bant puanı, anlık kelime sayacı ve süre takibi.',
+      'Diagnostic Drill veya kısa yazma görevi — resmi tam IELTS oturumu değil; bant göstergesi ve kelime sayacı.',
     icon: PenLineIcon,
     accent: 'from-cyan-400 via-sky-500 to-blue-600',
     ring: 'group-hover:ring-cyan-400/50',
@@ -53,7 +53,7 @@ export const EXAM_MODES: readonly ExamMode[] = [
     label: 'CAIE A-Level',
     tagline: 'RUBRIC_ESSAY',
     description:
-      'Cambridge komut kelimeleriyle açık uçlu sorular. AO1 / AO2 / AO3 mark scheme üzerinden harf notu.',
+      'Mikro alıştırma veya kısa rubrik görevi — tek oturum vaka analizi; resmi CAIE serisi değildir.',
     icon: BookOpenIcon,
     accent: 'from-violet-400 via-purple-500 to-fuchsia-600',
     ring: 'group-hover:ring-violet-400/50',
@@ -71,15 +71,15 @@ export const EXAM_MODES: readonly ExamMode[] = [
     curriculum: 'SAT',
     engineType: 'OBJECTIVE',
     label: 'Digital SAT',
-    tagline: 'OBJECTIVE',
+    tagline: 'Drill & Mini Mock',
     description:
-      'Bluebook hissi. Dört şık, klavyeden A-B-C-D ile seçim ve anında deterministik puanlama.',
+      'Diagnostic Drill (3–5 soru) veya Mini Deneme (10–12 soru). Resmi Bluebook tam oturumu değildir.',
     icon: ListChecksIcon,
     accent: 'from-amber-300 via-orange-500 to-rose-500',
     ring: 'group-hover:ring-amber-400/50',
     subjects: ['Reading & Writing', 'Math'],
     defaultQuestions: 4,
-    maxQuestions: 5,
+    maxQuestions: 12,
   },
 ];
 

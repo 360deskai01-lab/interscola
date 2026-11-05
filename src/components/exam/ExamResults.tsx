@@ -20,6 +20,8 @@ import {
   metricLabel,
   metricSuffix,
 } from '@/lib/exam-shared';
+import { getScoreTransparencyCopy } from '@/lib/exam/score-transparency';
+import { inferSessionFormat, sessionFormatUiLabel } from '@/lib/exam/exam-session-formats';
 import { GlassCard, fireConfetti, useCountUp } from './ui';
 
 interface ExamResultsProps {
@@ -63,6 +65,11 @@ export function ExamResults({
   );
 
   const breakdownEntries = Object.entries(evaluation.metricBreakdown);
+  const transparency = getScoreTransparencyCopy(
+    exam.curriculum,
+    exam.engineType,
+  );
+  const sessionFormat = inferSessionFormat(exam);
 
   /*
    * Konfeti yalnızca taze çözülmüş sınavda patlar. Geçmiş bir denemeyi
@@ -114,6 +121,13 @@ export function ExamResults({
           <p className="mt-5 text-xs font-medium tracking-wide text-slate-500 uppercase">
             {exam.subject} · {exam.curriculum}
           </p>
+          <p className="mt-2 inline-flex rounded-full border border-amber-400/35 bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-100">
+            {sessionFormatUiLabel(sessionFormat)}
+          </p>
+
+          <p className="mx-auto mt-4 max-w-xl text-xs font-medium text-slate-300">
+            {transparency.scoreHeading}
+          </p>
 
           <div className="mt-2 flex items-baseline justify-center gap-2">
             <span className="bg-gradient-to-br from-white to-slate-400 bg-clip-text text-6xl font-semibold tracking-tight text-transparent tabular-nums">
@@ -141,6 +155,10 @@ export function ExamResults({
 
           <p className="mx-auto mt-4 max-w-lg text-sm leading-relaxed text-slate-400">
             {evaluation.feedback}
+          </p>
+
+          <p className="mx-auto mt-4 max-w-xl text-left text-[11px] leading-relaxed text-amber-200/90">
+            *{transparency.footnote}
           </p>
         </div>
       </GlassCard>

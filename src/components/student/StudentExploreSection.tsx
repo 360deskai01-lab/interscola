@@ -2,8 +2,10 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Compass, Loader2, Rocket } from 'lucide-react';
+import { AlertTriangle, Compass, Loader2, Rocket, Zap } from 'lucide-react';
 import type { PublicLibraryItem } from '@/app/student/public-library-actions';
+import { LibraryNewBadge } from '@/components/exam/LibraryNewBadge';
+import { isLibraryRecentlyAdded } from '@/lib/public-library/library-new-badge';
 
 type ExploreFilter = 'ALL' | 'SAT' | 'IELTS' | 'CAIE';
 
@@ -21,7 +23,12 @@ const btnClass =
 
 interface StudentExploreSectionProps {
   libraries: PublicLibraryItem[];
-  onStartExam: (libraryId: string) => Promise<{
+  onStartMiniMock: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    assignmentId?: string;
+  }>;
+  onStartDiagnosticDrill: (libraryId: string) => Promise<{
     success: boolean;
     error?: string;
     assignmentId?: string;
@@ -32,40 +39,66 @@ interface StudentExploreSectionProps {
     assignmentId?: string;
   }>;
   primaryCurriculumLabel?: string;
+  searchQuery?: string;
 }
 
 export function StudentExploreSection({
   libraries,
-  onStartExam,
+  onStartMiniMock,
+  onStartDiagnosticDrill,
   onStartDiagnostic,
   primaryCurriculumLabel,
+  searchQuery = '',
 }: StudentExploreSectionProps): ReactNode {
   const router = useRouter();
   const [filter, setFilter] = useState<ExploreFilter>('ALL');
   const [pending, startTransition] = useTransition();
   const [busyLibraryId, setBusyLibraryId] = useState<string | null>(null);
+  const [busyLibraryMode, setBusyLibraryMode] = useState<
+    'mini' | 'drill' | null
+  >(null);
   const [diagnosticBusy, setDiagnosticBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const filteredLibraries = useMemo(() => {
-    if (filter === 'ALL') return libraries;
-    return libraries.filter(
-      (item) => item.curriculum.toUpperCase() === filter,
-    );
-  }, [filter, libraries]);
+    const byCurriculum =
+      filter === 'ALL'
+        ? libraries
+        : libraries.filter(
+            (item) => item.curriculum.toUpperCase() === filter,
+          );
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return byCurriculum;
+    return byCurriculum.filter((item) => {
+      const haystack = [item.title, item.curriculum, item.subject ?? '']
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [filter, libraries, searchQuery]);
 
   function goToExam(assignmentId: string) {
     router.push(`/exam-session/${assignmentId}`);
   }
 
-  function handleStartExam(libraryId: string) {
+  function handleStartLibrary(
+    libraryId: string,
+    mode: 'mini' | 'drill',
+    action: (id: string) => Promise<{
+      success: boolean;
+      error?: string;
+      assignmentId?: string;
+    }>,
+  ) {
     setError(null);
     setBusyLibraryId(libraryId);
+    setBusyLibraryMode(mode);
     startTransition(async () => {
-      const result = await onStartExam(libraryId);
+      const result = await action(libraryId);
       setBusyLibraryId(null);
+      setBusyLibraryMode(null);
       if (!result.success || !result.assignmentId) {
-        setError(result.error ?? 'Sınav başlatılamadı.');
+        setError(result.error ?? 'Oturum başlatılamadı.');
         return;
       }
       goToExam(result.assignmentId);
@@ -79,7 +112,7 @@ export function StudentExploreSection({
       const result = await onStartDiagnostic();
       setDiagnosticBusy(false);
       if (!result.success || !result.assignmentId) {
-        setError(result.error ?? 'Teşhis sınavı başlatılamadı.');
+        setError(result.error ?? 'Diagnostic Drill başlatılamadı.');
         return;
       }
       goToExam(result.assignmentId);
@@ -90,15 +123,15 @@ export function StudentExploreSection({
     <div className="space-y-6">
       <div className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-500/10 via-indigo-500/10 to-violet-500/10 p-5">
         <p className="text-sm font-semibold text-slate-100">
-          <span aria-hidden>🎯</span> 15 Dakikalık Hızlı Seviye Tespiti
+          Diagnostic Drill (Mikro Alıştırma · 3–5 Soru)
         </p>
         <p className="mt-1 text-xs leading-relaxed text-slate-400">
-          Hedef sınavına göre (Diagnostic / Seviye Tespit materyali) kısa bir
-          deneme başlatılır
+          Hedef sınavına göre kısa hızlı seviye tespiti — resmi tam sınav
+          değildir
           {primaryCurriculumLabel
-            ? ` — öncelik: ${primaryCurriculumLabel}`
-            : ' — varsayılan: Digital SAT'}
-          . Sonuçların gelişim grafiğine yansır.
+            ? ` · öncelik: ${primaryCurriculumLabel}`
+            : ' · varsayılan: Digital SAT'}
+          . Sonuçlar gelişim grafiğine yansır.
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
@@ -110,12 +143,12 @@ export function StudentExploreSection({
             {pending && diagnosticBusy ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <span aria-hidden>🎯</span>
+              <Zap className="size-3.5" />
             )}
-            Teşhis Sınavını Başlat
+            Diagnostic Drill Başlat
           </button>
           <span className={`${badgeClass} border-slate-500/30 text-slate-400`}>
-            ~15 dk
+            ~15 dk · Mikro
           </span>
         </div>
       </div>
@@ -165,7 +198,12 @@ export function StudentExploreSection({
               className="flex flex-col rounded-xl border border-white/10 bg-slate-950/40 p-4"
             >
               <div className="min-w-0 flex-1">
-                <h3 className="font-medium text-slate-100">{item.title}</h3>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="font-medium text-slate-100">{item.title}</h3>
+                  {isLibraryRecentlyAdded(item.createdAt) ? (
+                    <LibraryNewBadge className="shrink-0" />
+                  ) : null}
+                </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <span
                     className={`${badgeClass} border-sky-400/35 bg-sky-500/12 text-sky-100`}
@@ -185,25 +223,47 @@ export function StudentExploreSection({
                     <span
                       className={`${badgeClass} border-emerald-400/30 bg-emerald-500/10 text-emerald-100`}
                     >
-                      Sınav hazır
+                      Oturum hazır
                     </span>
                   ) : null}
                 </div>
               </div>
-              <button
-                type="button"
-                disabled={pending || !item.hasExam}
-                onClick={() => handleStartExam(item.id)}
-                className={`${btnClass} mt-4 w-full border-fuchsia-400/40 bg-fuchsia-500/12 text-fuchsia-100 hover:bg-fuchsia-500/22`}
-              >
-                {pending && busyLibraryId === item.id ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Rocket className="size-3.5" />
-                )}
-                <span aria-hidden>🚀</span>
-                Sınavı Başlat
-              </button>
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={pending || !item.hasExam}
+                  onClick={() =>
+                    handleStartLibrary(item.id, 'mini', onStartMiniMock)
+                  }
+                  className={`${btnClass} w-full border-fuchsia-400/40 bg-fuchsia-500/12 text-fuchsia-100 hover:bg-fuchsia-500/22`}
+                >
+                  {pending &&
+                  busyLibraryId === item.id &&
+                  busyLibraryMode === 'mini' ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Rocket className="size-3.5" />
+                  )}
+                  Mini Deneme (10–12 Soru · ~18 dk)
+                </button>
+                <button
+                  type="button"
+                  disabled={pending || !item.hasExam}
+                  onClick={() =>
+                    handleStartLibrary(item.id, 'drill', onStartDiagnosticDrill)
+                  }
+                  className={`${btnClass} w-full border-cyan-400/35 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20`}
+                >
+                  {pending &&
+                  busyLibraryId === item.id &&
+                  busyLibraryMode === 'drill' ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Zap className="size-3.5" />
+                  )}
+                  Diagnostic Drill (Mikro · 3–5 Soru)
+                </button>
+              </div>
               {!item.hasExam ? (
                 <p className="mt-2 text-[10px] text-slate-500">
                   Bu kart için yeterli metin / sınav verisi yok.

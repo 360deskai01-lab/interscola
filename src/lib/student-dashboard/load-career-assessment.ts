@@ -6,7 +6,8 @@ import {
   type CareerCompassStageId,
 } from '@/lib/career-assessment/progress';
 import { suggestTieredMajors } from '@/lib/assessment/majors';
-import { riasecRadarData } from '@/lib/assessment/scoring';
+import { pickPrimaryRadarSeries } from '@/lib/assessment/radar-series';
+import { buildCareerInventoryTriad } from '@/lib/career-assessment/inventory-triad';
 import type { StudentCareerSnapshot } from '@/lib/student-command-center/types';
 import {
   CAREER_ASSESSMENT_USER_SELECT,
@@ -130,12 +131,23 @@ function pickPreferredRowMeta(
   return { kind, normalized };
 }
 
+function emptyInventoryTriad(): StudentCareerSnapshot['inventoryTriad'] {
+  return {
+    cards: [],
+    synthesis: { primaryMajors: [], secondaryMajors: [] },
+    completedStageCount: 0,
+    totalStages: 3,
+    progressPercent: 0,
+  };
+}
+
 function buildSnapshotFromScores(
   scores: AssessmentScoreMatrix,
   meta: {
     kind: AssessmentKind;
     normalized: ReturnType<typeof normalizeCareerAssessmentRow>;
   },
+  completedStages: Set<CareerCompassStageId>,
 ): StudentCareerSnapshot {
   const hollandCode =
     meta.normalized.hollandCodeFallback || scores.hollandCode || undefined;
@@ -146,7 +158,8 @@ function buildSnapshotFromScores(
       ? meta.normalized.topTraits
       : extractTopStrengthTraits(scores);
 
-  const tiered = suggestTieredMajors(scores.topRiasec);
+  const inventoryTriad = buildCareerInventoryTriad(scores, completedStages);
+  const { primaryMajors, secondaryMajors } = inventoryTriad.synthesis;
 
   return {
     hasAssessment: true,
@@ -154,19 +167,14 @@ function buildSnapshotFromScores(
     hollandCode,
     hollandTitle,
     topTraits,
-    radarData: riasecRadarData(scores).map(({ axis, value }) => ({
-      axis,
-      value,
-    })),
+    radarData: pickPrimaryRadarSeries(scores),
     aiInterpretation: meta.normalized.aiInterpretation,
     assessedAt: meta.normalized.createdAt,
-    primaryMajors: tiered.primaryMajors,
-    secondaryMajors: tiered.secondaryMajors,
-    suggestedMajors: [
-      ...tiered.primaryMajors,
-      ...tiered.secondaryMajors,
-    ].map((m) => m.title),
+    primaryMajors,
+    secondaryMajors,
+    suggestedMajors: [...primaryMajors, ...secondaryMajors].map((m) => m.title),
     pinnedUniversityNames: [],
+    inventoryTriad,
   };
 }
 
@@ -182,9 +190,13 @@ export async function loadStudentCareerSnapshot(
     secondaryMajors: [],
     suggestedMajors: [],
     pinnedUniversityNames: [],
+    inventoryTriad: emptyInventoryTriad(),
   };
 
-  const rows = await fetchCareerAssessmentRowsForUser(client, userId);
+  const [rows, completedStages] = await Promise.all([
+    fetchCareerAssessmentRowsForUser(client, userId),
+    loadCompletedCareerStages(client, userId),
+  ]);
   if (rows.length === 0) {
     return empty;
   }
@@ -228,5 +240,5 @@ export async function loadStudentCareerSnapshot(
     return empty;
   }
 
-  return buildSnapshotFromScores(scores, meta);
+  return buildSnapshotFromScores(scores, meta, completedStages);
 }

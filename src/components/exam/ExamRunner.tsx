@@ -9,8 +9,12 @@ import {
   ChevronsRight,
 } from 'lucide-react';
 import type { AssessmentPayload, ExamQuestion } from '@/types/exam';
-import { formatClock } from '@/lib/exam-shared';
 import { countWords, stripOptionLabel } from '@/lib/exam-shared';
+import {
+  inferSessionFormat,
+  sessionFormatUiLabel,
+} from '@/lib/exam/exam-session-formats';
+import { ExamCountdownTimer } from '@/components/exam/ExamCountdownTimer';
 import { GlassCard } from './ui';
 
 // ---------------------------------------------------------------------------
@@ -188,33 +192,32 @@ export function ExamRunner({
       exit={{ opacity: 0, y: -18 }}
       transition={{ duration: 0.4 }}
     >
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
-            {exam.subject} · {exam.curriculum}
-          </p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">
-            {exam.title}
-          </h2>
+      <header className="sticky top-0 z-30 -mx-1 mb-6 border-b border-white/10 bg-slate-950/92 px-1 pb-4 pt-2 backdrop-blur-md sm:-mx-2 sm:px-2">
+        <div className="flex flex-col items-center gap-3">
+          <ExamCountdownTimer secondsLeft={secondsLeft} />
+          <div className="flex w-full max-w-4xl flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0 text-left">
+              <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+                {exam.subject} · {exam.curriculum}
+              </p>
+              <h2 className="mt-1 truncate text-lg font-semibold tracking-tight sm:text-xl">
+                {exam.title}
+              </h2>
+              <p className="mt-1 text-[11px] font-medium text-amber-200/90">
+                {sessionFormatUiLabel(inferSessionFormat(exam))}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 tabular-nums">
+                Soru {currentIndex + 1} / {totalQuestions}
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
+                {exam.totalMarks} puan
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 tabular-nums">
-            Soru {currentIndex + 1} / {totalQuestions}
-          </span>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1">
-            {exam.totalMarks} puan
-          </span>
-          <span
-            className={`rounded-full border px-3 py-1 tabular-nums ${
-              secondsLeft <= 30
-                ? 'border-rose-400/40 bg-rose-500/15 text-rose-200'
-                : 'border-white/10 bg-white/[0.04] text-slate-300'
-            }`}
-          >
-            {formatClock(secondsLeft)}
-          </span>
-        </div>
-      </div>
+      </header>
 
       <GlassCard className="overflow-hidden p-6 sm:p-8">
         <div className="relative">

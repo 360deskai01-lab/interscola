@@ -28,6 +28,13 @@ export async function loadTeacherStudentCareerSnapshot(
       secondaryMajors: [],
       suggestedMajors: [],
       pinnedUniversityNames: [],
+      inventoryTriad: {
+        cards: [],
+        synthesis: { primaryMajors: [], secondaryMajors: [] },
+        completedStageCount: 0,
+        totalStages: 3,
+        progressPercent: 0,
+      },
     };
   }
 

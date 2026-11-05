@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   useEffect,
+  useMemo,
   useState,
   useTransition,
   type FormEvent,
@@ -13,7 +14,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
-  Compass,
   Link2,
   Loader2,
   Mail,
@@ -48,7 +48,18 @@ import type {
 import { StudentGoalsModal } from '@/components/student/StudentGoalsModal';
 import { StudentCareerAcademicCockpit } from '@/components/student/StudentCareerAcademicCockpit';
 import { GuestDataClaimBridge } from '@/components/student/GuestDataClaimBridge';
+import { StudentSidebar } from '@/components/student/StudentSidebar';
+import { StudentTranscriptSection } from '@/components/student/StudentTranscriptSection';
+import type { TranscriptStudentIdentity } from '@/components/student/OfficialTranscriptPrintModal';
+import type { AcademicTranscriptData } from '@/lib/student-transcript/types';
+import { StudentPortfolioSection } from '@/components/student/StudentPortfolioSection';
+import type { ActivityPassportData } from '@/lib/student-portfolio/types';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
+import {
+  parseStudentDashboardTab,
+  studentDashboardTabToSearchParam,
+  type StudentDashboardTab,
+} from '@/lib/student-dashboard/dashboard-tabs';
 
 interface ConnectClaimResult {
   success: boolean;
@@ -93,7 +104,12 @@ interface StudentPanelProps {
   unreadByAssignment: Record<string, number>;
   analytics: StudentAnalyticsData;
   publicLibraries: PublicLibraryItem[];
-  onStartSelfPacedExam: (libraryId: string) => Promise<{
+  onStartMiniMock: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    assignmentId?: string;
+  }>;
+  onStartDiagnosticDrill: (libraryId: string) => Promise<{
     success: boolean;
     error?: string;
     assignmentId?: string;
@@ -103,9 +119,16 @@ interface StudentPanelProps {
     error?: string;
     assignmentId?: string;
   }>;
+  academicTranscript: AcademicTranscriptData;
+  transcriptStudentIdentity: TranscriptStudentIdentity;
+  onSaveStudentTranscript: (
+    transcript: AcademicTranscriptData,
+  ) => Promise<{ success: boolean; error?: string; data?: AcademicTranscriptData }>;
+  activityPassport: ActivityPassportData;
+  onSaveStudentActivities: (
+    data: ActivityPassportData,
+  ) => Promise<{ success: boolean; error?: string; data?: ActivityPassportData }>;
 }
-
-type StudentPanelTab = 'inbox' | 'explore';
 
 const CURRICULUM_LABELS: Record<string, string> = {
   SAT: 'Digital SAT',
@@ -176,14 +199,19 @@ export function StudentPanel({
   unreadByAssignment,
   analytics,
   publicLibraries,
-  onStartSelfPacedExam,
+  onStartMiniMock,
+  onStartDiagnosticDrill,
   onStartDiagnosticExam,
+  academicTranscript,
+  transcriptStudentIdentity,
+  onSaveStudentTranscript,
+  activityPassport,
+  onSaveStudentActivities,
 }: StudentPanelProps): ReactNode {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab =
-    searchParams.get('tab') === 'explore' ? 'explore' : 'inbox';
-  const [panelTab, setPanelTab] = useState<StudentPanelTab>(initialTab);
+  const activeTab = parseStudentDashboardTab(searchParams.get('tab'));
+  const [searchQuery, setSearchQuery] = useState('');
   const primaryCurriculumLabel =
     curriculums.length > 0 ? curriculumLabel(curriculums[0]!) : undefined;
   const [messageTarget, setMessageTarget] =
@@ -232,6 +260,39 @@ export function StudentPanel({
   }
 
   const alreadyLinked = teachers.length > 0;
+
+  const unreadMessageTotal = useMemo(
+    () =>
+      Object.values(unreadByAssignment).reduce(
+        (sum, count) => sum + count,
+        0,
+      ),
+    [unreadByAssignment],
+  );
+
+  const filteredAssignments = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return localAssignments;
+    return localAssignments.filter((item) => {
+      const haystack = [
+        item.materialTitle,
+        item.teacherName,
+        curriculumLabel(item.curriculum),
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [localAssignments, searchQuery]);
+
+  function navigateTab(tab: StudentDashboardTab) {
+    const params = new URLSearchParams(searchParams.toString());
+    const param = studentDashboardTabToSearchParam(tab);
+    if (param) params.set('tab', param);
+    else params.delete('tab');
+    const query = params.toString();
+    router.push(query ? `/student/dashboard?${query}` : '/student/dashboard');
+  }
 
   function openStudyMaterial(item: StudentAssignment) {
     const text = item.studyMaterialText?.trim() ?? '';
@@ -398,173 +459,182 @@ export function StudentPanel({
         }}
       />
 
-      <StudentCareerAcademicCockpit data={commandCenter} />
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+        <StudentSidebar
+          activeTab={activeTab}
+          onNavigate={navigateTab}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          unreadMessageTotal={unreadMessageTotal}
+        />
 
-      {/* Bildirimler */}
-      <AnimatePresence mode="wait">
-        {error ? (
-          <motion.div
-            key="error"
-            role="alert"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-start gap-2.5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100"
-          >
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-300" />
-            <span className="leading-relaxed">{error}</span>
-          </motion.div>
-        ) : null}
-
-        {success ? (
-          <motion.div
-            key="success"
-            role="status"
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="flex items-start gap-2.5 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100"
-          >
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" />
-            <span className="leading-relaxed">{success}</span>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">
-        <button
-          type="button"
-          onClick={() => setPanelTab('inbox')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition sm:flex-none ${
-            panelTab === 'inbox'
-              ? 'bg-gradient-to-r from-sky-500/25 to-indigo-500/20 text-white shadow-inner'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <ClipboardList className="size-4" />
-          Eğitmenlerimden Gelenler
-        </button>
-        <button
-          type="button"
-          onClick={() => setPanelTab('explore')}
-          className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition sm:flex-none ${
-            panelTab === 'explore'
-              ? 'bg-gradient-to-r from-cyan-500/25 to-violet-500/20 text-white shadow-inner'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Compass className="size-4" />
-          <span aria-hidden>🌐</span>
-          Keşfet & Açık Sınav Havuzu
-        </button>
-      </div>
-
-      {panelTab === 'explore' ? (
-        <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-cyan-500/[0.04] p-6">
-          <AnimatePresence>
-            {diagnosticAiBusyNotice ? (
+        <div className="min-w-0 flex-1 space-y-6">
+          <AnimatePresence mode="wait">
+            {error ? (
               <motion.div
+                key="error"
                 role="alert"
                 initial={{ opacity: 0, y: -8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-sm text-amber-50"
+                className="flex items-start gap-2.5 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100"
               >
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-300" />
-                <p className="min-w-0 flex-1 leading-relaxed">
-                  {DIAGNOSTIC_AI_BUSY_MESSAGE}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setDiagnosticAiBusyNotice(false)}
-                  className="shrink-0 rounded-md border border-amber-400/30 px-2 py-0.5 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/15"
-                  aria-label="Uyarıyı kapat"
-                >
-                  Kapat
-                </button>
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-rose-300" />
+                <span className="leading-relaxed">{error}</span>
+              </motion.div>
+            ) : null}
+
+            {success ? (
+              <motion.div
+                key="success"
+                role="status"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="flex items-start gap-2.5 rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100"
+              >
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-300" />
+                <span className="leading-relaxed">{success}</span>
               </motion.div>
             ) : null}
           </AnimatePresence>
-          <StudentExploreSection
-            libraries={publicLibraries}
-            onStartExam={onStartSelfPacedExam}
-            onStartDiagnostic={handleStartDiagnosticExam}
-            primaryCurriculumLabel={primaryCurriculumLabel}
-          />
-        </div>
-      ) : null}
 
-      {panelTab !== 'inbox' ? null : (
-        <>
-      {/* Hedef sınav rozetleri */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
-        <h2 className="text-sm font-medium text-slate-200">Hedef Sınavlarım</h2>
-        {curriculums.length === 0 ? (
-          <p className="mt-2 text-xs text-slate-500">
-            Kayıt sırasında sınav seçilmemiş.
-          </p>
-        ) : (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {curriculums.map((code) => (
-              <span
-                key={code}
-                className="rounded-full border border-sky-400/30 bg-sky-500/15 px-3 py-1.5 text-sm font-medium text-sky-200"
-              >
-                {curriculumLabel(code)}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+          {activeTab === 'cockpit' ? (
+            <>
+              <StudentCareerAcademicCockpit data={commandCenter} />
+              <StudentAnalyticsSection analytics={analytics} />
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
+                <h2 className="text-sm font-medium text-slate-200">
+                  Hedef Sınavlarım
+                </h2>
+                {curriculums.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Kayıt sırasında sınav seçilmemiş.
+                  </p>
+                ) : (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {curriculums.map((code) => (
+                      <span
+                        key={code}
+                        className="rounded-full border border-sky-400/30 bg-sky-500/15 px-3 py-1.5 text-sm font-medium text-sky-200"
+                      >
+                        {curriculumLabel(code)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
+                <div className="flex items-center gap-2">
+                  <Link2 className="size-4 text-indigo-400" />
+                  <h2 className="text-sm font-medium text-slate-200">
+                    Öğretmene Bağlan
+                  </h2>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Öğretmeninin verdiği 8 haneli davet kodunu gir.
+                </p>
+                <form
+                  onSubmit={handleSubmit}
+                  className="mt-4 flex flex-wrap gap-2"
+                >
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={(event) => setInviteCode(event.target.value)}
+                    placeholder="INT-XXXX"
+                    maxLength={12}
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label="Davet kodu"
+                    className="min-w-[180px] flex-1 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 font-mono text-sm tracking-wider text-slate-100 uppercase outline-none transition placeholder:text-slate-600 focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/10"
+                  />
+                  <button
+                    type="submit"
+                    disabled={pending}
+                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {pending ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Link2 className="size-4" />
+                    )}
+                    Bağlan
+                  </button>
+                </form>
+                {alreadyLinked ? (
+                  <p className="mt-3 text-xs text-amber-400/80">
+                    Zaten bağlı bir öğretmenin var. Yeni bağlantı için önce
+                    mevcut bağlantının kaldırılması gerekir.
+                  </p>
+                ) : null}
+              </div>
+            </>
+          ) : null}
 
-      {/* Öğretmene bağlan */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <Link2 className="size-4 text-indigo-400" />
-          <h2 className="text-sm font-medium text-slate-200">
-            Öğretmene Bağlan
-          </h2>
-        </div>
-        <p className="mt-1 text-xs text-slate-500">
-          Öğretmeninin verdiği 8 haneli davet kodunu gir.
-        </p>
+          {activeTab === 'career' ? (
+            <StudentCareerAcademicCockpit
+              data={commandCenter}
+              view="career"
+            />
+          ) : null}
 
-        <form onSubmit={handleSubmit} className="mt-4 flex flex-wrap gap-2">
-          <input
-            type="text"
-            value={inviteCode}
-            onChange={(event) => setInviteCode(event.target.value)}
-            placeholder="INT-XXXX"
-            maxLength={12}
-            autoComplete="off"
-            spellCheck={false}
-            aria-label="Davet kodu"
-            className="min-w-[180px] flex-1 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 font-mono text-sm tracking-wider text-slate-100 uppercase outline-none transition placeholder:text-slate-600 focus:border-indigo-400/60 focus:ring-4 focus:ring-indigo-500/10"
-          />
-          <button
-            type="submit"
-            disabled={pending}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-fuchsia-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {pending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Link2 className="size-4" />
-            )}
-            Bağlan
-          </button>
-        </form>
+          {activeTab === 'explore' ? (
+            <div className="overflow-hidden rounded-3xl border border-cyan-400/20 bg-cyan-500/[0.04] p-6">
+              <AnimatePresence>
+                {diagnosticAiBusyNotice ? (
+                  <motion.div
+                    role="alert"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="mb-4 flex items-start gap-2.5 rounded-2xl border border-amber-400/35 bg-amber-500/10 p-4 text-sm text-amber-50"
+                  >
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-300" />
+                    <p className="min-w-0 flex-1 leading-relaxed">
+                      {DIAGNOSTIC_AI_BUSY_MESSAGE}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setDiagnosticAiBusyNotice(false)}
+                      className="shrink-0 rounded-md border border-amber-400/30 px-2 py-0.5 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/15"
+                      aria-label="Uyarıyı kapat"
+                    >
+                      Kapat
+                    </button>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+              <StudentExploreSection
+                libraries={publicLibraries}
+                onStartMiniMock={onStartMiniMock}
+                onStartDiagnosticDrill={onStartDiagnosticDrill}
+                onStartDiagnostic={handleStartDiagnosticExam}
+                primaryCurriculumLabel={primaryCurriculumLabel}
+                searchQuery={searchQuery}
+              />
+            </div>
+          ) : null}
 
-        {alreadyLinked ? (
-          <p className="mt-3 text-xs text-amber-400/80">
-            Zaten bağlı bir öğretmenin var. Yeni bağlantı için önce mevcut
-            bağlantının kaldırılması gerekir.
-          </p>
-        ) : null}
-      </div>
+          {activeTab === 'transcript' ? (
+            <StudentTranscriptSection
+              key={academicTranscript.updatedAt ?? 'initial'}
+              initialData={academicTranscript}
+              studentIdentity={transcriptStudentIdentity}
+              onSave={onSaveStudentTranscript}
+            />
+          ) : null}
 
-      {/* Atanan ödevler / materyaller */}
-      <div className="overflow-hidden rounded-3xl border border-sky-400/15 bg-sky-500/[0.04]">
+          {activeTab === 'portfolio' ? (
+            <StudentPortfolioSection
+              key={activityPassport.updatedAt ?? 'initial'}
+              initialData={activityPassport}
+              onSave={onSaveStudentActivities}
+            />
+          ) : null}
+
+          {activeTab === 'assignments' ? (
+            <div className="overflow-hidden rounded-3xl border border-sky-400/15 bg-sky-500/[0.04]">
         <div className="flex items-center gap-2 border-b border-white/10 px-6 py-4">
           <ClipboardList className="size-4 text-sky-300" />
           <h2 className="text-sm font-medium text-slate-200">
@@ -582,14 +652,18 @@ export function StudentPanel({
           </div>
         ) : null}
 
-        {localAssignments.length === 0 ? (
+        {filteredAssignments.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <ClipboardList className="mx-auto size-8 text-slate-700" />
             <p className="mt-3 text-sm text-slate-400">
-              Henüz atanmış bir materyal yok.
+              {localAssignments.length === 0
+                ? 'Henüz atanmış bir materyal yok.'
+                : 'Aramanızla eşleşen ödev bulunamadı.'}
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              Eğitmenin sana ödev veya ders materyali atadığında burada görünür.
+              {localAssignments.length === 0
+                ? 'Eğitmenin sana ödev veya ders materyali atadığında burada görünür.'
+                : 'Farklı bir anahtar kelime deneyin veya aramayı temizleyin.'}
             </p>
           </div>
         ) : (
@@ -606,7 +680,7 @@ export function StudentPanel({
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {localAssignments.map((item) => {
+                {filteredAssignments.map((item) => {
                   const isBusy =
                     assignmentPending && busyAssignmentId === item.id;
                   return (
@@ -739,12 +813,11 @@ export function StudentPanel({
             </table>
           </div>
         )}
-      </div>
+            </div>
+          ) : null}
 
-      <StudentAnalyticsSection analytics={analytics} />
-
-      {/* Eğitmenlerim */}
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
+          {activeTab === 'messages' ? (
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
         <div className="border-b border-white/10 px-6 py-4">
           <h2 className="text-sm font-medium text-slate-200">Eğitmenlerim</h2>
         </div>
@@ -809,9 +882,10 @@ export function StudentPanel({
             ))}
           </ul>
         )}
+            </div>
+          ) : null}
+        </div>
       </div>
-        </>
-      )}
 
       <StudyMaterialReaderModal
         target={studyTarget}

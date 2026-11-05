@@ -9,13 +9,6 @@ import {
   useTransition,
   type ReactNode,
 } from 'react';
-import {
-  PolarAngleAxis,
-  PolarGrid,
-  Radar,
-  RadarChart,
-  ResponsiveContainer,
-} from 'recharts';
 import { Compass, Loader2, Lock, Sparkles } from 'lucide-react';
 import {
   generateDeepCareerReportAction,
@@ -39,9 +32,11 @@ import {
   DEEP_ASSESSMENT_META,
   getDeepQuestions,
 } from '@/lib/assessment/deep-questions';
-import { suggestTieredMajors } from '@/lib/assessment/majors';
-import { MajorMatchGroups } from '@/components/career/MajorMatchGroups';
-import { calculateScores, riasecRadarData } from '@/lib/assessment/scoring';
+import { calculateScores } from '@/lib/assessment/scoring';
+import { mergeAssessmentScoreMatrices } from '@/lib/career-assessment/merge-scores';
+import { buildCareerInventoryTriad } from '@/lib/career-assessment/inventory-triad';
+import { CareerHybridSynthesisCard } from '@/components/career/CareerHybridSynthesisCard';
+import { CareerInventoryTriad } from '@/components/career/CareerInventoryTriad';
 import { QUICK_COMBO_QUESTIONS } from '@/lib/assessment/questions';
 import type {
   AssessmentAnswers,
@@ -227,6 +222,7 @@ function ResultsView({
   progressPercent,
   completedCount,
   totalStages,
+  completedStages,
   nextStage,
   onStartStage,
   onRestart,
@@ -237,20 +233,15 @@ function ResultsView({
   progressPercent: number;
   completedCount: number;
   totalStages: number;
+  completedStages: Set<CareerCompassStageId>;
   nextStage: CareerCompassStageId | null;
   onStartStage: (kind: AssessmentKind) => void;
   onRestart: () => void;
 }): ReactNode {
-  const radarData = useMemo(() => riasecRadarData(scores), [scores]);
-  const tieredMajors = useMemo(
-    () => suggestTieredMajors(scores.topRiasec),
-    [scores.topRiasec],
+  const inventoryBundle = useMemo(
+    () => buildCareerInventoryTriad(scores, completedStages),
+    [scores, completedStages],
   );
-  const [radarMounted, setRadarMounted] = useState(false);
-
-  useEffect(() => {
-    setRadarMounted(true);
-  }, []);
 
   const nextCta =
     nextStage && isLoggedIn ? CAREER_STAGE_CTA[nextStage] : null;
@@ -272,37 +263,13 @@ function ResultsView({
         </p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-4 sm:p-5">
-        <h3 className="mb-2 text-sm font-medium text-slate-200">
-          RIASEC Radar Profili
-        </h3>
-        <div className="h-72 w-full">
-          {radarMounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="70%">
-                <PolarGrid stroke="rgba(255,255,255,0.12)" />
-                <PolarAngleAxis
-                  dataKey="axis"
-                  tick={{ fill: '#94a3b8', fontSize: 11 }}
-                />
-                <Radar
-                  name="Uyum"
-                  dataKey="value"
-                  stroke="#818cf8"
-                  fill="#6366f1"
-                  fillOpacity={0.35}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-slate-500">
-              Grafik yükleniyor…
-            </div>
-          )}
-        </div>
-        <MajorMatchGroups
-          primaryMajors={tieredMajors.primaryMajors}
-          secondaryMajors={tieredMajors.secondaryMajors}
+      <div className="space-y-5 rounded-2xl border border-white/10 bg-slate-950/50 p-4 sm:p-5">
+        <CareerInventoryTriad cards={inventoryBundle.cards} />
+        <CareerHybridSynthesisCard
+          synthesis={inventoryBundle.synthesis}
+          progressPercent={inventoryBundle.progressPercent}
+          completedStageCount={inventoryBundle.completedStageCount}
+          totalStages={inventoryBundle.totalStages}
         />
       </div>
 
@@ -476,33 +443,45 @@ export default function CareerCompassClient({
     [isLoggedIn, markStageComplete, refreshProgress],
   );
 
+  const mergeWithExistingScores = useCallback(
+    (previous: AssessmentScoreMatrix | null, incoming: AssessmentScoreMatrix) => {
+      const list = previous ? [previous, incoming] : [incoming];
+      return mergeAssessmentScoreMatrices(list) ?? incoming;
+    },
+    [],
+  );
+
   const handleQuickComplete = useCallback(
     (answers: AssessmentAnswers, result: AssessmentScoreMatrix) => {
-      setScores(result);
+      setScores((prev) => mergeWithExistingScores(prev, result));
       setResultSourceKind('quick_combo');
       setPhase('results');
       persistResult('quick_combo', answers, result);
     },
-    [persistResult],
+    [mergeWithExistingScores, persistResult],
   );
 
   const handleDeepComplete = useCallback(
     (kind: AssessmentKind, answers: AssessmentAnswers, result: AssessmentScoreMatrix) => {
-      setScores(result);
+      let mergedForAi = result;
+      setScores((prev) => {
+        mergedForAi = mergeWithExistingScores(prev, result);
+        return mergedForAi;
+      });
       setResultSourceKind(kind);
       setDeepKind(null);
       setPhase('results');
       persistResult(kind, answers, result);
       if (isLoggedIn) {
         startTransition(async () => {
-          const ai = await generateDeepCareerReportAction(result);
+          const ai = await generateDeepCareerReportAction(mergedForAi);
           if (ai.success && ai.report) {
             setDeepReport(ai.report);
           }
         });
       }
     },
-    [isLoggedIn, persistResult],
+    [isLoggedIn, mergeWithExistingScores, persistResult],
   );
 
   useEffect(() => {
@@ -649,6 +628,7 @@ export default function CareerCompassClient({
               progressPercent={progressMeta.percent}
               completedCount={progressMeta.completedCount}
               totalStages={progressMeta.total}
+              completedStages={completedStages}
               nextStage={progressMeta.nextStage}
               onStartStage={(kind) => {
                 setDeepKind(kind);
