@@ -10,8 +10,10 @@ import {
   Wallet,
   ClipboardList,
   Award,
+  Briefcase,
   X,
 } from 'lucide-react';
+import { getUniversityDisplayBadges } from '@/lib/budget-simulator/university-enrichment';
 import type {
   StudentLatestScores,
   University,
@@ -114,6 +116,12 @@ export function UniversityDetailModal({
       : '—';
   const satDisplay =
     university.min_sat_score !== null ? String(university.min_sat_score) : '—';
+
+  const costBadges = getUniversityDisplayBadges(
+    university.slug,
+    university.country,
+    university.special_programs_badge,
+  );
 
   return (
     <div
@@ -245,6 +253,24 @@ export function UniversityDetailModal({
               Maliyet & Yaşam Analizi
             </h3>
             <dl className="space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm">
+              {costBadges.partTimeWork || costBadges.specialProgram ? (
+                <div className="flex flex-wrap gap-2 pb-1">
+                  {costBadges.partTimeWork ? (
+                    <span className="inline-flex max-w-full items-start gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[11px] leading-snug text-emerald-100">
+                      <Briefcase
+                        className="mt-0.5 size-3.5 shrink-0 text-emerald-300"
+                        aria-hidden
+                      />
+                      {costBadges.partTimeWork}
+                    </span>
+                  ) : null}
+                  {costBadges.specialProgram ? (
+                    <span className="inline-flex max-w-full rounded-full border border-violet-400/35 bg-violet-500/10 px-3 py-1 text-[11px] leading-snug text-violet-100">
+                      {costBadges.specialProgram}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               <div>
                 <dt className="text-xs text-slate-500">Yıllık harç aralığı</dt>
                 <dd className="mt-0.5 font-medium text-slate-100">

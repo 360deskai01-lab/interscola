@@ -23,6 +23,11 @@ import {
   saveCareerAssessmentAction,
 } from '@/app/career-compass/actions';
 import {
+  BIG_FIVE_DEEP_MODULE_READY,
+  HOLLAND_DEEP_MODULE_READY,
+  QUICK_RESULT_DEEPENING_INTRO,
+} from '@/lib/career-assessment/deep-module-readiness';
+import {
   CAREER_COMPASS_STAGE_ORDER,
   CAREER_STAGE_CTA,
   CAREER_STAGE_LABELS,
@@ -182,9 +187,43 @@ function CompassProgressBar({
   );
 }
 
+function DeepeningModuleButton({
+  label,
+  ready,
+  enabled,
+  onClick,
+}: {
+  label: string;
+  ready: boolean;
+  enabled: boolean;
+  onClick: () => void;
+}): ReactNode {
+  const active = ready && enabled;
+  return (
+    <button
+      type="button"
+      disabled={!active}
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-2 rounded-xl border px-4 py-3 text-left text-sm transition ${
+        active
+          ? 'border-violet-400/40 bg-violet-500/15 text-violet-50 hover:bg-violet-500/25'
+          : 'cursor-not-allowed border-white/10 bg-white/[0.02] text-slate-500 opacity-80'
+      }`}
+    >
+      <span>{label}</span>
+      {!active ? (
+        <span className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100">
+          Çok Yakında / Pro
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function ResultsView({
   scores,
   isLoggedIn,
+  resultSourceKind,
   progressPercent,
   completedCount,
   totalStages,
@@ -194,6 +233,7 @@ function ResultsView({
 }: {
   scores: AssessmentScoreMatrix;
   isLoggedIn: boolean;
+  resultSourceKind: AssessmentKind | null;
   progressPercent: number;
   completedCount: number;
   totalStages: number;
@@ -266,6 +306,39 @@ function ResultsView({
         />
       </div>
 
+      {resultSourceKind === 'quick_combo' ? (
+        <section className="rounded-2xl border border-cyan-400/25 bg-cyan-500/5 p-5 sm:p-6">
+          <p className="text-sm leading-relaxed text-slate-300">
+            {QUICK_RESULT_DEEPENING_INTRO}
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <DeepeningModuleButton
+              label="Holland Derin Mesleki İlgi Modülü"
+              ready={HOLLAND_DEEP_MODULE_READY}
+              enabled={isLoggedIn}
+              onClick={() => onStartStage('deep_riasec')}
+            />
+            <DeepeningModuleButton
+              label="Big Five Odak & Çalışma Stili Modülü"
+              ready={BIG_FIVE_DEEP_MODULE_READY}
+              enabled={isLoggedIn}
+              onClick={() => onStartStage('deep_big_five')}
+            />
+          </div>
+          {!isLoggedIn ? (
+            <p className="mt-3 text-center text-xs text-slate-500">
+              Derin modüller kayıtlı öğrenci hesabında açılır.{' '}
+              <Link
+                href="/auth/register?next=%2Fcareer-compass"
+                className="text-indigo-300 underline"
+              >
+                Ücretsiz hesap oluştur
+              </Link>
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       <div className="relative overflow-hidden rounded-2xl border border-white/10">
         <div
           className={`space-y-4 p-6 ${isLoggedIn ? '' : 'select-none blur-sm'}`}
@@ -332,6 +405,9 @@ export default function CareerCompassClient({
 }: CareerCompassClientProps): ReactNode {
   const [phase, setPhase] = useState<FlowPhase>('intro');
   const [scores, setScores] = useState<AssessmentScoreMatrix | null>(null);
+  const [resultSourceKind, setResultSourceKind] = useState<AssessmentKind | null>(
+    null,
+  );
   const [deepKind, setDeepKind] = useState<AssessmentKind | null>(null);
   const [deepReport, setDeepReport] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -403,6 +479,7 @@ export default function CareerCompassClient({
   const handleQuickComplete = useCallback(
     (answers: AssessmentAnswers, result: AssessmentScoreMatrix) => {
       setScores(result);
+      setResultSourceKind('quick_combo');
       setPhase('results');
       persistResult('quick_combo', answers, result);
     },
@@ -412,6 +489,7 @@ export default function CareerCompassClient({
   const handleDeepComplete = useCallback(
     (kind: AssessmentKind, answers: AssessmentAnswers, result: AssessmentScoreMatrix) => {
       setScores(result);
+      setResultSourceKind(kind);
       setDeepKind(null);
       setPhase('results');
       persistResult(kind, answers, result);
@@ -437,6 +515,7 @@ export default function CareerCompassClient({
       };
       if (parsed.scores) {
         setScores(parsed.scores);
+        setResultSourceKind('quick_combo');
         setPhase('results');
       }
     } catch {
@@ -566,6 +645,7 @@ export default function CareerCompassClient({
             <ResultsView
               scores={scores}
               isLoggedIn={isLoggedIn}
+              resultSourceKind={resultSourceKind}
               progressPercent={progressMeta.percent}
               completedCount={progressMeta.completedCount}
               totalStages={progressMeta.total}
@@ -577,6 +657,7 @@ export default function CareerCompassClient({
               }}
               onRestart={() => {
                 setScores(null);
+                setResultSourceKind(null);
                 setPhase('intro');
                 setDeepKind(null);
                 setDeepReport(null);

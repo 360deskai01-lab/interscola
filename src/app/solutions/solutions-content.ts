@@ -32,6 +32,8 @@ export type SolutionTabContent = {
   benefits: SolutionBenefit[];
   ctaLabel: string;
   ctaHref: string;
+  secondaryCtaLabel?: string;
+  secondaryCtaHref?: string;
 };
 
 const CORPORATE_CONTACT = '/contact';
@@ -168,6 +170,8 @@ export const SOLUTION_TABS: SolutionTabContent[] = [
     ],
     ctaLabel: 'Üniversite rehberini keşfet',
     ctaHref: '/universities',
+    secondaryCtaLabel: 'Aylık bütçene göre şehir keşfet',
+    secondaryCtaHref: '/test-et/budget',
   },
   {
     id: 'burs',
@@ -199,8 +203,8 @@ export const SOLUTION_TABS: SolutionTabContent[] = [
         description: 'Rapor export ve paylaşım (genişletme fazı).',
       },
     ],
-    ctaLabel: 'Paketleri incele',
-    ctaHref: '/pricing',
+    ctaLabel: '2 Dakikada Burs İhtimalini Hesapla',
+    ctaHref: '/test-et/scholarship',
   },
 ];
 

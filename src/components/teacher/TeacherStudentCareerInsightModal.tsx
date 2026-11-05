@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
-import { CareerRadarChart } from '@/components/student/CareerRadarChart';
+import { TeacherStudentCareerSnapshot } from '@/components/teacher/TeacherStudentCareerSnapshot';
 import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 
 export interface TeacherCareerInsightTarget {
@@ -127,70 +127,10 @@ export function TeacherStudentCareerInsightModal({
 
           {!pending && insight && !error ? (
             <div className="space-y-4">
-              {!insight.hasAssessment ? (
-                <p className="text-sm text-slate-400">
-                  Öğrenci henüz Kariyer Pusulası envanterini tamamlamamış.
-                  Atadığınız materyalleri genel hedef sınavlarına göre
-                  planlayabilirsiniz.
-                </p>
-              ) : (
+              <TeacherStudentCareerSnapshot insight={insight} />
+
+              {insight.hasAssessment ? (
                 <>
-                  <div className="rounded-xl border border-violet-400/25 bg-violet-500/10 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs text-violet-200">Holland profili</p>
-                        <p className="mt-1 font-semibold text-slate-50">
-                          {insight.hollandCode} — {insight.hollandTitle}
-                        </p>
-                      </div>
-                      {typeof insight.progressPercent === 'number' ? (
-                        <span className="shrink-0 rounded-full border border-violet-400/30 bg-violet-500/15 px-2 py-0.5 text-[10px] tabular-nums text-violet-100">
-                          Pusula %{insight.progressPercent}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {insight.radarData.length > 0 ? (
-                    <div className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
-                      <p className="mb-2 text-xs font-medium text-slate-500">
-                        RIASEC radar
-                      </p>
-                      <CareerRadarChart data={insight.radarData} />
-                    </div>
-                  ) : null}
-
-                  {insight.topTraits.length > 0 ? (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        Baskın ilgi & güçlü yönler
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {insight.topTraits.map((trait) => (
-                          <span
-                            key={trait}
-                            className="rounded-full border border-indigo-400/30 bg-indigo-500/12 px-2.5 py-0.5 text-[11px] text-indigo-100"
-                          >
-                            {trait}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {insight.cognitiveHighlights.length > 0 ? (
-                    <div>
-                      <p className="text-xs font-medium text-slate-500">
-                        Bilişsel vurgular
-                      </p>
-                      <ul className="mt-2 list-inside list-disc text-sm text-slate-300">
-                        {insight.cognitiveHighlights.map((item) => (
-                          <li key={item}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
                   {insight.primaryMajors.length > 0 ? (
                     <div>
                       <p className="text-xs font-medium text-emerald-300/90">
@@ -223,7 +163,7 @@ export function TeacherStudentCareerInsightModal({
                     </p>
                   ) : null}
                 </>
-              )}
+              ) : null}
 
               <div>
                 <p className="text-xs font-medium text-slate-500">

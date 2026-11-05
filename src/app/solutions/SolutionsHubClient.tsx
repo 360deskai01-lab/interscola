@@ -107,6 +107,14 @@ export function SolutionsHubClient(): ReactNode {
           >
             {content.ctaLabel}
           </Link>
+          {content.secondaryCtaHref && content.secondaryCtaLabel ? (
+            <Link
+              href={content.secondaryCtaHref}
+              className="inline-flex rounded-full border border-sky-400/35 bg-sky-500/10 px-6 py-3 text-sm font-semibold text-sky-100 transition hover:border-sky-300/50"
+            >
+              {content.secondaryCtaLabel}
+            </Link>
+          ) : null}
           <Link
             href="/pricing"
             className="inline-flex rounded-full border border-white/15 bg-white/[0.04] px-6 py-3 text-sm font-medium text-slate-200 transition hover:border-white/30"

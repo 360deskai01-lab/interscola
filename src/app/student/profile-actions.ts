@@ -13,10 +13,18 @@ import {
   normalizeJoinCodeInput,
 } from '@/lib/b2b/join-code';
 import {
+  isOrganizationLicenseActive,
+  isStudentQuotaExceeded,
+  normalizeStudentQuota,
+  ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
+  ORG_JOIN_QUOTA_FULL_MESSAGE,
+} from '@/lib/b2b/license-quota';
+import {
   getStudentProfileDbClient,
   loadStudentGoalsContext,
   loadStudentOrganization,
 } from '@/lib/student-profile/load-context';
+import { GUEST_LEAD_TARGET_SCORES_KEY } from '@/lib/guest-lead/constants';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 
@@ -143,10 +151,31 @@ export async function updateStudentGoalsAction(
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
+    const { data: existingProfile } = await client
+      .from('profiles')
+      .select('target_scores')
+      .eq('id', student.userId)
+      .maybeSingle();
+
+    const existingScores =
+      existingProfile?.target_scores &&
+      typeof existingProfile.target_scores === 'object' &&
+      !Array.isArray(existingProfile.target_scores)
+        ? (existingProfile.target_scores as Record<string, unknown>)
+        : {};
+
+    const guestLead = existingScores[GUEST_LEAD_TARGET_SCORES_KEY];
+    const nextTargetScores: Record<string, unknown> = {
+      ...normalized.targetScores,
+    };
+    if (guestLead !== undefined) {
+      nextTargetScores[GUEST_LEAD_TARGET_SCORES_KEY] = guestLead;
+    }
+
     const { error } = await client
       .from('profiles')
       .update({
-        target_scores: normalized.targetScores,
+        target_scores: nextTargetScores,
         target_university_ids: normalized.targetUniversityIds,
         updated_at: new Date().toISOString(),
       })
@@ -212,9 +241,8 @@ export async function joinOrganizationByCodeAction(
 
     const { data: orgRow, error: orgError } = await client
       .from('organizations')
-      .select('id, name, is_active, join_code')
+      .select('id, name, is_active, join_code, student_quota, valid_until')
       .eq('join_code', normalized)
-      .eq('is_active', true)
       .maybeSingle();
 
     if (orgError) {
@@ -232,11 +260,51 @@ export async function joinOrganizationByCodeAction(
     if (!orgRow) {
       return {
         success: false,
-        message: 'Geçersiz veya süresi dolmuş katılım kodu.',
+        message: ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
       };
     }
 
-    const org = orgRow as { id: string; name: string };
+    const org = orgRow as {
+      id: string;
+      name: string;
+      is_active: boolean | null;
+      student_quota: number | null;
+      valid_until: string | null;
+    };
+
+    if (
+      !isOrganizationLicenseActive(org.is_active, org.valid_until)
+    ) {
+      return {
+        success: false,
+        message: ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
+      };
+    }
+
+    const studentQuota = normalizeStudentQuota(org.student_quota);
+
+    const { count: seatsUsed, error: countError } = await client
+      .from('organization_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', org.id)
+      .eq('org_role', 'student')
+      .eq('is_active', true);
+
+    if (countError) {
+      console.error('[student-profile] Kota sayımı:', countError.message);
+      return {
+        success: false,
+        message: 'Kurum kotası doğrulanamadı. Lütfen tekrar deneyin.',
+      };
+    }
+
+    const usedSeats = seatsUsed ?? 0;
+    if (isStudentQuotaExceeded(usedSeats, studentQuota)) {
+      return {
+        success: false,
+        message: ORG_JOIN_QUOTA_FULL_MESSAGE,
+      };
+    }
 
     const { data: duplicate, error: dupError } = await client
       .from('organization_members')

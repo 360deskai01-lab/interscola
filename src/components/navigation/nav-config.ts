@@ -14,6 +14,8 @@ export const NAV_CAREER_COMPASS_HREF = '/career-compass';
 export const NAV_TEST_ET_SAT_HREF = '/test-et/sat';
 export const NAV_TEST_ET_IELTS_HREF = '/test-et/ielts';
 export const NAV_TEST_ET_A_LEVEL_HREF = '/test-et/a-level';
+export const NAV_TEST_ET_SCHOLARSHIP_HREF = '/test-et/scholarship';
+export const NAV_TEST_ET_BUDGET_HREF = '/test-et/budget';
 
 export const SOLUTIONS_LINKS: NavLinkItem[] = [
   {
@@ -64,6 +66,18 @@ export const TEST_LINKS: NavLinkItem[] = [
   { label: 'Digital SAT', href: NAV_TEST_ET_SAT_HREF },
   { label: 'IELTS Academic', href: NAV_TEST_ET_IELTS_HREF },
   { label: 'Cambridge CAIE A-Level', href: NAV_TEST_ET_A_LEVEL_HREF },
+  {
+    label: 'Burs & Destek Simülatörü',
+    href: NAV_TEST_ET_SCHOLARSHIP_HREF,
+    description: '8 adımda need & merit burs uygunluğu — üyelik gerekmez',
+    badge: 'Yeni',
+  },
+  {
+    label: 'Bütçe & Yaşam Maliyeti',
+    href: NAV_TEST_ET_BUDGET_HREF,
+    description: 'Aylık bütçeye göre şehir ve üniversite eşleşmesi',
+    badge: 'Yeni',
+  },
 ];
 
 export const PRIMARY_NAV_LINKS: NavLinkItem[] = [

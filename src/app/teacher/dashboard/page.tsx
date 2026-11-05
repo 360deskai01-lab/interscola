@@ -119,8 +119,7 @@ export default async function TeacherDashboardPage(): Promise<ReactNode> {
                     {orgContext.organizationName}
                     {orgContext.branchName
                       ? ` — ${orgContext.branchName}`
-                      : ''}{' '}
-                    (Rol: {orgContext.orgRoleLabel})
+                      : ''}
                   </span>
                 </p>
               ) : null}

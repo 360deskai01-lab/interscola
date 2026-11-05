@@ -27,6 +27,8 @@ export interface University {
   cover_image_url: string | null;
   disciplines?: string[];
   tuition_tier?: TuitionTier | string | null;
+  /** CMS / DB genişlemesi: çift diploma vb. kısa rozet metni. */
+  special_programs_badge?: string | null;
 }
 
 export type UniversityCountryFilter =

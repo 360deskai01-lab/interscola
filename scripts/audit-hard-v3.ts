@@ -22,6 +22,16 @@ import {
   normalizeJoinCodeInput,
   generateRandomJoinCode,
 } from '../src/lib/b2b/join-code';
+import {
+  computeSeatUsage,
+  isOrganizationLicenseActive,
+  isStudentQuotaExceeded,
+  ORG_JOIN_QUOTA_FULL_MESSAGE,
+} from '../src/lib/b2b/license-quota';
+import {
+  COORDINATOR_ELIGIBLE_ORG_ROLES,
+  isCoordinatorEligibleOrgRole,
+} from '../src/lib/b2b/coordinator-types';
 import { parseAssessmentPayload } from '../src/lib/assessment-payload';
 import {
   SOLUTION_TAB_IDS,
@@ -29,7 +39,45 @@ import {
   parseSolutionTab,
   solutionsTabHref,
 } from '../src/lib/solutions/solution-tabs';
-import { TEST_LINKS } from '../src/components/navigation/nav-config';
+import {
+  NAV_TEST_ET_BUDGET_HREF,
+  NAV_TEST_ET_SCHOLARSHIP_HREF,
+  TEST_LINKS,
+} from '../src/components/navigation/nav-config';
+import { BUDGET_CATALOG_SEED } from '../src/lib/budget-simulator/catalog-seed';
+import {
+  AUDIT_BUDGET_COMFORT_INPUT,
+  AUDIT_BUDGET_TIGHT_INPUT,
+  auditBudgetCatalogSize,
+  evaluateBudgetSimulator,
+} from '../src/lib/budget-simulator/evaluator';
+import { getUniversityDisplayBadges } from '../src/lib/budget-simulator/university-enrichment';
+import {
+  GUEST_BUDGET_KEY,
+  GUEST_DIAGNOSTIC_EXAM_KEY,
+  GUEST_LEAD_TARGET_SCORES_KEY,
+  GUEST_SCHOLARSHIP_KEY,
+} from '../src/lib/guest-lead/constants';
+import { mergeGuestLeadIntoTargetScores } from '../src/lib/guest-lead/merge-target-scores';
+import {
+  BIG_FIVE_DEEP_MODULE_READY,
+  HOLLAND_DEEP_MODULE_READY,
+  QUICK_RESULT_DEEPENING_INTRO,
+} from '../src/lib/career-assessment/deep-module-readiness';
+import { formatRiasecDominantCodes } from '../src/lib/career-assessment/teacher-snapshot-format';
+import {
+  BUDGET_REGISTER_HREF,
+  BUDGET_SIMULATOR_PATH,
+} from '../src/lib/budget-simulator/types';
+import { SOLUTION_TABS } from '../src/app/solutions/solutions-content';
+import {
+  AUDIT_HIGH_NEED_INPUT,
+  evaluateScholarshipSimulator,
+} from '../src/lib/scholarship-simulator/evaluator';
+import {
+  SCHOLARSHIP_REGISTER_HREF,
+  SCHOLARSHIP_SIMULATOR_PATH,
+} from '../src/lib/scholarship-simulator/types';
 import { CAIE_ANDRADE_DIAGNOSTIC_EXAM } from '../src/lib/test-et/caie-andrade-seed';
 import { scoreGuestDiagnostic } from '../src/lib/test-et/guest-diagnostic-scoring';
 import { GUEST_DIAGNOSTIC_STORAGE_KEY } from '../src/lib/test-et/guest-diagnostic-storage';
@@ -341,8 +389,26 @@ function runGroup5TestEtVitrine(): void {
   );
 
   assert(
-    'TEST_LINKS: 3 test-et vitrin linki',
-    navExamLinks.length === 3,
+    'TEST_LINKS: 5 test-et rotası',
+    navExamLinks.length === 5,
+  );
+
+  const scholarshipNav = TEST_LINKS.find(
+    (item) => item.href === NAV_TEST_ET_SCHOLARSHIP_HREF,
+  );
+  assert(
+    'TEST_LINKS: Burs & Destek Simülatörü',
+    scholarshipNav?.label === 'Burs & Destek Simülatörü' &&
+      scholarshipNav.href === SCHOLARSHIP_SIMULATOR_PATH,
+  );
+
+  const budgetNav = TEST_LINKS.find(
+    (item) => item.href === NAV_TEST_ET_BUDGET_HREF,
+  );
+  assert(
+    'TEST_LINKS: Bütçe & Yaşam Maliyeti',
+    budgetNav?.label === 'Bütçe & Yaşam Maliyeti' &&
+      budgetNav.href === BUDGET_SIMULATOR_PATH,
   );
 
   const expectedNav: { label: string; slug: TestEtSlug }[] = [
@@ -451,6 +517,290 @@ function runGroup5TestEtVitrine(): void {
   );
 }
 
+function runGroup6ScholarshipSimulator(): void {
+  console.log('\n=== Grup 6: Burs simülatörü ===');
+
+  assert(
+    'SCHOLARSHIP_SIMULATOR_PATH sabiti',
+    SCHOLARSHIP_SIMULATOR_PATH === '/test-et/scholarship',
+  );
+  assert(
+    'SCHOLARSHIP_REGISTER_HREF sabiti',
+    SCHOLARSHIP_REGISTER_HREF === '/auth/register?source=scholarship',
+  );
+
+  const bursTab = SOLUTION_TABS.find((tab) => tab.id === 'burs');
+  assert(
+    'Solutions burs sekmesi: simülatör CTA',
+    bursTab?.ctaHref === SCHOLARSHIP_SIMULATOR_PATH &&
+      bursTab.ctaLabel.includes('Burs İhtimalini'),
+  );
+
+  const highNeed = evaluateScholarshipSimulator(AUDIT_HIGH_NEED_INPUT);
+  assert(
+    'evaluateScholarshipSimulator: yüksek need bandı (DSU)',
+    highNeed.needBasedScore >= 85 && highNeed.needBasedScore <= 100,
+  );
+  assert(
+    'evaluateScholarshipSimulator: merit skoru aralığı',
+    highNeed.meritBasedScore >= 0 && highNeed.meritBasedScore <= 100,
+  );
+  assert(
+    'evaluateScholarshipSimulator: en az 2 eşleşme',
+    highNeed.matches.length >= 2,
+  );
+  assert(
+    'evaluateScholarshipSimulator: kilitli teaser alanları',
+    highNeed.lockedTeaser.iseeDocumentList.length >= 3 &&
+      highNeed.lockedTeaser.consulateApostilleNotes.length >= 2 &&
+      highNeed.lockedTeaser.applicationCalendar.length >= 2,
+  );
+  assert(
+    'evaluateScholarshipSimulator: İtalya DSU eşleşmesi',
+    highNeed.matches.some((m) => m.id === 'italy-dsu'),
+  );
+
+  const lowNeedHighMerit = evaluateScholarshipSimulator({
+    ...AUDIT_HIGH_NEED_INPUT,
+    householdIncome: 'over_55k',
+    propertyOwnership: 'multiple',
+    studentsInFamily: '1',
+    maxFamilyContribution: 'over_10k',
+    highSchoolGpa: '90_plus',
+    examStatus: 'sat_high',
+    englishProficiency: 'ielts_7_plus',
+  });
+  assert(
+    'evaluateScholarshipSimulator: düşük need / yüksek merit ayrımı',
+    lowNeedHighMerit.needBasedScore < highNeed.needBasedScore &&
+      lowNeedHighMerit.meritBasedScore > highNeed.meritBasedScore,
+  );
+}
+
+function runGroup7BudgetSimulator(): void {
+  console.log('\n=== Grup 7: Bütçe & yaşam maliyeti simülatörü ===');
+
+  assert(
+    'BUDGET_SIMULATOR_PATH sabiti',
+    BUDGET_SIMULATOR_PATH === '/test-et/budget',
+  );
+  assert(
+    'BUDGET_REGISTER_HREF sabiti',
+    BUDGET_REGISTER_HREF === '/auth/register?source=budget',
+  );
+  assert(
+    'BUDGET_CATALOG_SEED: en az 10 kayıt',
+    auditBudgetCatalogSize() >= 10,
+  );
+
+  const uniTab = SOLUTION_TABS.find((tab) => tab.id === 'universite');
+  assert(
+    'Solutions üniversite sekmesi: bütçe simülatörü linki',
+    uniTab?.secondaryCtaHref === BUDGET_SIMULATOR_PATH &&
+      Boolean(uniTab.secondaryCtaLabel?.trim()),
+  );
+
+  const comfort = evaluateBudgetSimulator(AUDIT_BUDGET_COMFORT_INPUT);
+  assert(
+    'evaluateBudgetSimulator: rahat bütçede eşleşme',
+    comfort.matchedUniversitiesCount >= 5 &&
+      comfort.matchedCitiesCount >= 3 &&
+      comfort.matchedCountriesCount >= 2,
+  );
+  assert(
+    'evaluateBudgetSimulator: 2 örnek şehir kartı',
+    comfort.sampleCities.length === 2,
+  );
+  assert(
+    'evaluateBudgetSimulator: Aachen veya Bologna örnekleri',
+    comfort.sampleCities.some(
+      (c) =>
+        c.city.toLowerCase().includes('aachen') ||
+        c.city.toLowerCase().includes('bologna'),
+    ),
+  );
+  assert(
+    'evaluateBudgetSimulator: kilitli liste dolu',
+    comfort.lockedUniversities.length === comfort.matchedUniversitiesCount &&
+      comfort.accommodationTips.length >= 3,
+  );
+
+  const tight = evaluateBudgetSimulator(AUDIT_BUDGET_TIGHT_INPUT);
+  assert(
+    'evaluateBudgetSimulator: sıkı bütçe < rahat bütçe eşleşmesi',
+    tight.matchedUniversitiesCount < comfort.matchedUniversitiesCount,
+  );
+  assert(
+    'evaluateBudgetSimulator: sıkı bütçede en az 1 eşleşme',
+    tight.matchedUniversitiesCount >= 1,
+  );
+  assert(
+    'evaluateBudgetSimulator: part-time ipucu hapı',
+    Boolean(comfort.partTimeInsightPill?.includes('€450')),
+  );
+  assert(
+    'evaluateBudgetSimulator: örnek kart part-time rozeti',
+    comfort.sampleCities.every((c) => Boolean(c.partTimeWork?.trim())),
+  );
+
+  const rwth = BUDGET_CATALOG_SEED.find((e) => e.slug === 'rwth-aachen');
+  assert(
+    'BUDGET_CATALOG_SEED: Almanya part-time metni',
+    Boolean(rwth?.partTimeWork?.includes('Minijob')),
+  );
+  const bocconi = BUDGET_CATALOG_SEED.find(
+    (e) => e.slug === 'bocconi-university',
+  );
+  assert(
+    'BUDGET_CATALOG_SEED: Bocconi çift diploma rozeti',
+    Boolean(bocconi?.specialProgram?.includes('Çift Diploma')),
+  );
+  const badges = getUniversityDisplayBadges('tu-munich', 'Almanya');
+  assert(
+    'getUniversityDisplayBadges: TUM özel program',
+    Boolean(badges.specialProgram?.includes('TUM')),
+  );
+}
+
+function runGroup8GuestLeadClaim(): void {
+  console.log('\n=== Grup 8: Misafir simülasyon claim köprüsü ===');
+
+  assert(
+    'GUEST_SCHOLARSHIP_KEY sabiti',
+    GUEST_SCHOLARSHIP_KEY === 'interscola_guest_scholarship',
+  );
+  assert(
+    'GUEST_BUDGET_KEY sabiti',
+    GUEST_BUDGET_KEY === 'interscola_guest_budget',
+  );
+  assert(
+    'GUEST_DIAGNOSTIC_EXAM_KEY sabiti',
+    GUEST_DIAGNOSTIC_EXAM_KEY === 'interscola_guest_exam',
+  );
+  assert(
+    'GUEST_LEAD_TARGET_SCORES_KEY sabiti',
+    GUEST_LEAD_TARGET_SCORES_KEY === '_guestLead',
+  );
+
+  const merged = mergeGuestLeadIntoTargetScores(
+    { SAT: 1400 },
+    {
+      scholarship: {
+        v: 1,
+        savedAt: '2026-01-01T00:00:00.000Z',
+        input: {
+          targetCountry: 'italy',
+          householdIncome: 'under_15k',
+          propertyOwnership: 'rent',
+          studentsInFamily: '2',
+          maxFamilyContribution: 'under_2k',
+          highSchoolGpa: '80_90',
+          examStatus: 'sat_mid',
+          englishProficiency: 'ielts_6',
+        },
+        needBasedScore: 88,
+        meritBasedScore: 55,
+        summaryParagraph: 'Audit özeti',
+        matchIds: ['italy-dsu'],
+      },
+    },
+  );
+
+  assert(
+    'mergeGuestLeadIntoTargetScores: SAT korunur',
+    merged.SAT === 1400,
+  );
+  const lead = merged[GUEST_LEAD_TARGET_SCORES_KEY] as {
+    scholarship?: { needBasedScore?: number };
+    claimedAt?: string;
+  };
+  assert(
+    'mergeGuestLeadIntoTargetScores: burs verisi yazılır',
+    lead?.scholarship?.needBasedScore === 88 && Boolean(lead.claimedAt),
+  );
+}
+
+function runGroup9CareerCompassBridge(): void {
+  console.log('\n=== Grup 9: Kariyer pusulası öğretmen & derinleştirme ===');
+
+  assert(
+    'formatRiasecDominantCodes: R-I-A',
+    formatRiasecDominantCodes(['R', 'I', 'A']) === 'R-I-A',
+  );
+  assert(
+    'QUICK_RESULT_DEEPENING_INTRO metni',
+    QUICK_RESULT_DEEPENING_INTRO.includes('Standart sapmayı'),
+  );
+  assert(
+    'HOLLAND_DEEP_MODULE_READY',
+    HOLLAND_DEEP_MODULE_READY === true,
+  );
+  assert(
+    'BIG_FIVE_DEEP_MODULE_READY',
+    BIG_FIVE_DEEP_MODULE_READY === true,
+  );
+}
+
+function runGroup10B2BLicenseQuota(): void {
+  console.log('\n=== Grup 10: B2B kota savunması & koordinatör bağlamı ===');
+
+  const future = new Date('2030-01-01T00:00:00.000Z');
+  const past = new Date('2020-01-01T00:00:00.000Z');
+
+  assert(
+    'license: aktif kurum (valid_until gelecek)',
+    isOrganizationLicenseActive(true, future.toISOString(), future),
+  );
+  assert(
+    'license: süresi dolmuş kurum',
+    !isOrganizationLicenseActive(true, past.toISOString(), future),
+  );
+  assert(
+    'license: is_active false',
+    !isOrganizationLicenseActive(false, future.toISOString(), future),
+  );
+
+  assert(
+    'quota: seatsUsed >= student_quota → dolu',
+    isStudentQuotaExceeded(50, 50) && !isStudentQuotaExceeded(49, 50),
+  );
+  assert(
+    'quota: null kota → sınırsız',
+    !isStudentQuotaExceeded(9999, null),
+  );
+  assert(
+    'quota: ORG_JOIN_QUOTA_FULL_MESSAGE metni',
+    ORG_JOIN_QUOTA_FULL_MESSAGE.includes('lisans kotası'),
+  );
+
+  const usage = computeSeatUsage(40, 50);
+  assert(
+    'computeSeatUsage: kalan ve yüzde',
+    usage.seatsRemaining === 10 &&
+      usage.usagePercent === 80 &&
+      !usage.isQuotaFull,
+  );
+  assert(
+    'computeSeatUsage: kota dolu bayrağı',
+    computeSeatUsage(50, 50).isQuotaFull,
+  );
+
+  assert(
+    'coordinator: org_admin uygun rol',
+    isCoordinatorEligibleOrgRole('org_admin'),
+  );
+  assert(
+    'coordinator: teacher uygun değil',
+    !isCoordinatorEligibleOrgRole('teacher'),
+  );
+  assert(
+    'COORDINATOR_ELIGIBLE_ORG_ROLES: coordinator + org_admin + school_admin',
+    COORDINATOR_ELIGIBLE_ORG_ROLES.includes('coordinator') &&
+      COORDINATOR_ELIGIBLE_ORG_ROLES.includes('org_admin') &&
+      COORDINATOR_ELIGIBLE_ORG_ROLES.includes('school_admin'),
+  );
+}
+
 function runGroup4CoreRegression(): void {
   console.log('\n=== Grup 4: B2B & çekirdek kütüphane regresyonu ===');
 
@@ -523,6 +873,11 @@ function main(): void {
   runGroup3HelpCenter();
   runGroup4CoreRegression();
   runGroup5TestEtVitrine();
+  runGroup6ScholarshipSimulator();
+  runGroup7BudgetSimulator();
+  runGroup8GuestLeadClaim();
+  runGroup9CareerCompassBridge();
+  runGroup10B2BLicenseQuota();
 
   const total = passed + failed;
   console.log('\n--- Özet ---');

@@ -46,6 +46,7 @@ export async function loadTeacherStudentCareerInsight(
       hasAssessment: false,
       studentName,
       topTraits: [],
+      viaCognitiveStrengths: [],
       cognitiveHighlights: [],
       radarData: [],
       primaryMajors: [],

@@ -203,21 +203,11 @@ export function TeacherPanel({
   return (
     <div className="space-y-6">
       {orgContext ? (
-        <div className="rounded-2xl border border-violet-400/25 bg-gradient-to-r from-violet-500/10 to-fuchsia-500/5 px-5 py-4 backdrop-blur">
-          <p className="text-sm font-medium text-violet-100">
-            Kurumsal Bağlam
-          </p>
-          <p className="mt-1.5 text-sm leading-relaxed text-slate-200">
-            <span aria-hidden className="mr-1">
-              🏛️
-            </span>
-            {orgContext.organizationName}
-            {orgContext.branchName ? ` — ${orgContext.branchName}` : ''}{' '}
-            <span className="text-violet-200/90">
-              (Rol: {orgContext.orgRoleLabel})
-            </span>
-          </p>
-        </div>
+        <p className="inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm font-medium text-violet-100">
+          <span aria-hidden>🏛️</span>
+          {orgContext.organizationName}
+          {orgContext.branchName ? ` — ${orgContext.branchName}` : ''}
+        </p>
       ) : null}
 
       <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-1.5">

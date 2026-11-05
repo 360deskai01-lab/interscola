@@ -47,6 +47,7 @@ import type {
 } from '@/lib/student-profile/types';
 import { StudentGoalsModal } from '@/components/student/StudentGoalsModal';
 import { StudentCareerAcademicCockpit } from '@/components/student/StudentCareerAcademicCockpit';
+import { GuestDataClaimBridge } from '@/components/student/GuestDataClaimBridge';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 
 interface ConnectClaimResult {
@@ -321,6 +322,7 @@ export function StudentPanel({
 
   return (
     <div className="space-y-6">
+      <GuestDataClaimBridge />
       {!localGoalsContext.hasGoals ? (
         <div
           id="student-goals-entry"

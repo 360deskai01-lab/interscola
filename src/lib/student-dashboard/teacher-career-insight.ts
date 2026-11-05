@@ -12,9 +12,12 @@ import {
 } from '@/lib/student-dashboard/load-career-assessment';
 import {
   extractTopStrengthTraits,
+  formatRiasecDominantCodes,
+  extractViaCognitiveStrengths,
   minimalAssessmentMatrixFromHolland,
   parseAssessmentScoreMatrix,
-} from '@/lib/student-dashboard/parse-score-matrix';
+  summarizeBigFiveBalance,
+} from '@/lib/student-dashboard/teacher-career-insight-format';
 import {
   loadStudentGoalsContext,
   parseUniversityIds,
@@ -40,6 +43,9 @@ export interface StudentCareerInsightForTeacher {
   studentName?: string;
   hollandCode?: string;
   hollandTitle?: string;
+  riasecDominantCodes?: string;
+  bigFiveSummary?: string;
+  viaCognitiveStrengths: string[];
   topTraits: string[];
   cognitiveHighlights: string[];
   radarData: { axis: string; value: number }[];
@@ -66,6 +72,7 @@ export async function loadStudentCareerInsightForTeacher(
     hasAssessment: false,
     studentName,
     topTraits: [],
+    viaCognitiveStrengths: [],
     cognitiveHighlights: [],
     radarData: [],
     primaryMajors: [],
@@ -119,7 +126,15 @@ export async function loadStudentCareerInsightForTeacher(
     matrices.length > 0 ? mergeAssessmentScoreMatrices(matrices) : null;
 
   const cognitiveHighlights: string[] = [];
+  let viaCognitiveStrengths: string[] = [];
+  let bigFiveSummary: string | undefined;
+  let riasecDominantCodes: string | undefined;
+
   if (mergedScores) {
+    viaCognitiveStrengths = extractViaCognitiveStrengths(mergedScores);
+    bigFiveSummary = summarizeBigFiveBalance(mergedScores);
+    riasecDominantCodes = formatRiasecDominantCodes(mergedScores.topRiasec);
+
     const ranked = [...COGNITIVE_KEYS].sort(
       (a, b) =>
         mergedScores.cognitive[b].percent - mergedScores.cognitive[a].percent,
@@ -129,6 +144,8 @@ export async function loadStudentCareerInsightForTeacher(
         cognitiveHighlights.push(COGNITIVE_LABELS[key]);
       }
     }
+  } else if (career.hollandCode) {
+    riasecDominantCodes = career.hollandCode.split('').join('-');
   }
 
   const tiered =
@@ -146,6 +163,9 @@ export async function loadStudentCareerInsightForTeacher(
     studentName,
     hollandCode: career.hollandCode,
     hollandTitle: career.hollandTitle,
+    riasecDominantCodes,
+    bigFiveSummary,
+    viaCognitiveStrengths,
     topTraits:
       career.topTraits.length > 0
         ? career.topTraits

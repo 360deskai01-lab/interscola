@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import {
   BookOpen,
+  Briefcase,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 import { DiagnosticExploreLink } from '@/components/universities/DiagnosticExploreLink';
 import { UniversityDetailModal } from '@/components/universities/UniversityDetailModal';
+import { getUniversityDisplayBadges } from '@/lib/budget-simulator/university-enrichment';
 import { UniversityCardMatchBlock } from '@/components/universities/UniversityCard';
 import { UniversityCardMediaHeader } from '@/components/universities/UniversityVisualMedia';
 import type {
@@ -517,7 +519,13 @@ export function UniversityExplorer({
           ) : (
             <>
               <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {universities.map((university) => (
+                {universities.map((university) => {
+                  const workBadges = getUniversityDisplayBadges(
+                    university.slug,
+                    university.country,
+                    university.special_programs_badge,
+                  );
+                  return (
                   <li
                     key={university.id}
                     className="flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40 transition hover:border-indigo-400/25 hover:bg-slate-950/60"
@@ -577,7 +585,25 @@ export function UniversityExplorer({
                               {tuitionTierShortLabel(university.tuition_tier)}
                             </span>
                           ) : null}
+                          {workBadges.specialProgram ? (
+                            <span
+                              className={`${badgeClass} border-violet-400/35 bg-violet-500/10 text-violet-100`}
+                            >
+                              {workBadges.specialProgram}
+                            </span>
+                          ) : null}
                         </div>
+                        {workBadges.partTimeWork ? (
+                          <p className="mt-2 inline-flex items-start gap-1 text-[10px] leading-snug text-emerald-200/90">
+                            <Briefcase
+                              className="mt-0.5 size-3 shrink-0 text-emerald-400"
+                              aria-hidden
+                            />
+                            <span className="line-clamp-2">
+                              {workBadges.partTimeWork}
+                            </span>
+                          </p>
+                        ) : null}
 
                         {university.description ? (
                           <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-slate-400">
@@ -643,7 +669,8 @@ export function UniversityExplorer({
                       </div>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
 
               {totalPages > 1 ? (

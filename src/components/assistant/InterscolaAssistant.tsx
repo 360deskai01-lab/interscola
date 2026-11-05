@@ -5,9 +5,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Bot,
   CalendarCheck,
+  MessageSquareText,
   Minimize2,
   Send,
-  Sparkles,
   X,
 } from 'lucide-react';
 import {
@@ -69,9 +69,14 @@ const WELCOME_MESSAGE: ChatMessage = {
   text: 'Merhaba! Interscola Asistan olarak sınav hazırlığı, paketler ve randevu konularında yardımcı olabilirim. Aşağıdaki hızlı sorulardan birini seçin veya yazın.',
 };
 
+const FAB_SPRING = { type: 'spring' as const, stiffness: 260, damping: 20 };
+const READY_PILL_AUTO_HIDE_MS = 7000;
+
 export function InterscolaAssistant() {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
+  const [fabEntrance, setFabEntrance] = useState(false);
+  const [showReadyPill, setShowReadyPill] = useState(false);
   const [phase, setPhase] = useState<AssistantPhase>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [draft, setDraft] = useState('');
@@ -90,6 +95,44 @@ export function InterscolaAssistant() {
 
   useEffect(() => {
     setBusinessDays(getNextBusinessDays(5, new Date()));
+  }, []);
+
+  useEffect(() => {
+    const entranceTimer = window.setTimeout(() => {
+      setFabEntrance(true);
+    }, 1000);
+    return () => window.clearTimeout(entranceTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!fabEntrance) return;
+    const pillTimer = window.setTimeout(() => {
+      setShowReadyPill(true);
+    }, 450);
+    return () => window.clearTimeout(pillTimer);
+  }, [fabEntrance]);
+
+  useEffect(() => {
+    if (!showReadyPill || open) return;
+    const hideTimer = window.setTimeout(() => {
+      setShowReadyPill(false);
+    }, READY_PILL_AUTO_HIDE_MS);
+    return () => window.clearTimeout(hideTimer);
+  }, [showReadyPill, open]);
+
+  const openAssistant = useCallback(() => {
+    setShowReadyPill(false);
+    setOpen(true);
+    setMinimized(false);
+  }, []);
+
+  const toggleAssistant = useCallback(() => {
+    setShowReadyPill(false);
+    setOpen((value) => {
+      const next = !value;
+      if (next) setMinimized(false);
+      return next;
+    });
   }, []);
 
   const appendMessages = useCallback((items: ChatMessage[]) => {
@@ -442,20 +485,66 @@ export function InterscolaAssistant() {
         </button>
       ) : null}
 
-      <motion.button
-        type="button"
-        onClick={() => {
-          setOpen((value) => !value);
-          setMinimized(false);
-        }}
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
-        className="fixed bottom-4 right-3 z-[60] grid size-14 place-items-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-600/45 ring-2 ring-indigo-300/30 sm:right-5"
-        aria-expanded={open}
-        aria-label={open ? 'Asistanı kapat' : 'Interscola Asistan'}
+      <div
+        className="fixed bottom-4 right-3 z-[60] flex items-center justify-end gap-3 sm:right-5"
+        onMouseEnter={() => setShowReadyPill(false)}
       >
-        <Sparkles className="size-6" aria-hidden />
-      </motion.button>
+        <AnimatePresence>
+          {showReadyPill && !open && !minimized ? (
+            <motion.button
+              type="button"
+              initial={{ opacity: 0, x: 12, scale: 0.92 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 8, scale: 0.95 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              onClick={openAssistant}
+              className="group relative max-w-[min(240px,calc(100vw-5rem))] rounded-2xl border border-white/15 bg-slate-950/90 px-3.5 py-2.5 text-left shadow-xl shadow-indigo-950/40 backdrop-blur-md"
+              aria-label="Asistan hazır — sohbeti aç"
+            >
+              <span
+                className="absolute -right-1.5 top-1/2 size-3 -translate-y-1/2 rotate-45 border-r border-b border-white/15 bg-slate-950/90"
+                aria-hidden
+              />
+              <span className="flex items-center gap-2 text-[11px] font-medium text-slate-100 sm:text-xs">
+                <span className="relative flex size-2 shrink-0">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/70 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+                </span>
+                👋 Asistan Hazır | Sorular & Randevu
+              </span>
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
+
+        <motion.button
+          type="button"
+          onClick={toggleAssistant}
+          initial={{ scale: 0, y: 30 }}
+          animate={
+            fabEntrance
+              ? { scale: 1, y: 0 }
+              : { scale: 0, y: 30 }
+          }
+          transition={FAB_SPRING}
+          whileHover={{ scale: 1.06 }}
+          whileTap={{ scale: 0.94 }}
+          className="relative grid size-[3.75rem] place-items-center rounded-full bg-gradient-to-br from-indigo-500 via-violet-600 to-fuchsia-600 text-white shadow-[0_8px_32px_rgba(99,102,241,0.45)] ring-2 ring-indigo-200/25"
+          aria-expanded={open}
+          aria-label={open ? 'Asistanı kapat' : 'Interscola Asistan'}
+        >
+          <span className="absolute -right-0.5 -top-0.5 flex size-3.5">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+            <span className="relative inline-flex size-3.5 rounded-full border-2 border-slate-950 bg-emerald-400" />
+          </span>
+          <span className="relative grid place-items-center">
+            <MessageSquareText className="size-6" aria-hidden />
+            <Bot
+              className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-violet-700/90 p-0.5 text-indigo-100"
+              aria-hidden
+            />
+          </span>
+        </motion.button>
+      </div>
     </>
   );
 }
