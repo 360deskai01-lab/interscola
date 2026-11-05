@@ -2,7 +2,17 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, Loader2, XCircle } from 'lucide-react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  KeyRound,
+  Loader2,
+  XCircle,
+} from 'lucide-react';
+import {
+  AdminResetPasswordModal,
+  type AdminResetPasswordUser,
+} from '@/components/admin/AdminResetPasswordModal';
 import type { AdminActionResult } from '@/app/admin/actions';
 
 type ProfileStatus = 'pending' | 'approved' | 'rejected';
@@ -76,6 +86,9 @@ export function UserTable({
    */
   const [rows, setRows] = useState<AdminUserRow[]>(users);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resetUser, setResetUser] = useState<AdminResetPasswordUser | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const router = useRouter();
@@ -140,8 +153,24 @@ export function UserTable({
     );
   }
 
+  function openResetModal(row: AdminUserRow) {
+    setResetUser({
+      id: row.id,
+      email: row.email,
+      full_name: row.fullName?.trim() || row.email,
+    });
+  }
+
+  const canResetPassword = (role: string) =>
+    role === 'student' || role === 'teacher';
+
   return (
     <div className="space-y-3">
+      <AdminResetPasswordModal
+        isOpen={resetUser !== null}
+        onClose={() => setResetUser(null)}
+        user={resetUser}
+      />
       {error ? (
         <div
           role="alert"
@@ -207,6 +236,18 @@ export function UserTable({
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-2">
+                        {canResetPassword(row.role) ? (
+                          <button
+                            type="button"
+                            onClick={() => openResetModal(row)}
+                            disabled={isBusy}
+                            title="Şifre sıfırla"
+                            className="flex items-center gap-1.5 rounded-lg border border-amber-400/35 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <KeyRound className="size-3.5" aria-hidden />
+                            Şifre Sıfırla
+                          </button>
+                        ) : null}
                         {canApprove ? (
                           <button
                             type="button"

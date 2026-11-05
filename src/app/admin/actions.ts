@@ -22,6 +22,14 @@ export interface AdminActionResult {
   newStatus?: 'approved' | 'rejected';
 }
 
+export interface AdminPasswordResetResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+const ADMIN_PASSWORD_MIN_LENGTH = 6;
+
 const DASHBOARD_PATH = '/admin/dashboard';
 
 /** UUID biçim kontrolü: geçersiz id ile sorgu atmadan önce eleme. */
@@ -151,9 +159,93 @@ export async function updateUserStatus(
 }
 
 /**
+ * Master admin: hedef öğrenci/öğretmen auth şifresini service role ile günceller.
+ */
+export async function adminResetUserPasswordAction(
+  targetUserId: string,
+  newPassword: string,
+): Promise<AdminPasswordResetResult> {
+  try {
+    const admin = await requireApprovedAdmin();
+    if (!admin) {
+      throw new Error('Bu işlem için master admin yetkisi gerekiyor.');
+    }
+
+    if (typeof targetUserId !== 'string' || !UUID_PATTERN.test(targetUserId)) {
+      throw new Error('Geçersiz kullanıcı kimliği.');
+    }
+
+    if (typeof newPassword !== 'string') {
+      throw new Error('Geçersiz şifre.');
+    }
+
+    const trimmedPassword = newPassword.trim();
+    if (trimmedPassword.length < ADMIN_PASSWORD_MIN_LENGTH) {
+      throw new Error(
+        `Şifre en az ${ADMIN_PASSWORD_MIN_LENGTH} karakter olmalıdır.`,
+      );
+    }
+
+    if (targetUserId === admin.id) {
+      throw new Error(
+        'Kendi şifrenizi bu panelden değiştirmek için profil ayarlarını kullanın.',
+      );
+    }
+
+    const supabase = getSupabaseAdmin(PROFILES_SCHEMA);
+    if (!supabase) {
+      throw new Error(
+        'Veritabanı yapılandırması eksik (SUPABASE_SERVICE_ROLE_KEY).',
+      );
+    }
+
+    const { data: target, error: targetError } = await supabase
+      .from('profiles')
+      .select('id, role')
+      .eq('id', targetUserId)
+      .maybeSingle();
+
+    if (targetError || !target) {
+      throw new Error('Kullanıcı bulunamadı.');
+    }
+
+    const role = (target as { role: string }).role;
+    if (role === 'admin') {
+      throw new Error('Yönetici hesaplarının şifresi bu panelden değiştirilemez.');
+    }
+    if (role !== 'student' && role !== 'teacher') {
+      throw new Error('Yalnızca öğrenci ve öğretmen şifreleri güncellenebilir.');
+    }
+
+    const { error: authError } = await supabase.auth.admin.updateUserById(
+      targetUserId,
+      { password: trimmedPassword },
+    );
+
+    if (authError) {
+      console.error('[admin] Şifre güncellenemedi:', authError.message);
+      throw new Error(
+        authError.message || 'Auth şifresi güncellenemedi.',
+      );
+    }
+
+    return {
+      success: true,
+      message: 'Kullanıcı şifresi başarıyla güncellendi.',
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Beklenmeyen bir hata oluştu.';
+    console.error('[admin] adminResetUserPasswordAction:', message);
+    return { success: false, error: message };
+  }
+}
+
+/**
  * Admin oturumunu kapatır ve giriş sayfasına yönlendirir.
  * `redirect()` çağrısı hata fırlattığı için try/catch dışında tutulur.
- */export async function signOutAdmin(): Promise<void> {
+ */
+export async function signOutAdmin(): Promise<void> {
   try {
     const url =
       process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
