@@ -29,6 +29,8 @@ export interface University {
   tuition_tier?: TuitionTier | string | null;
   /** CMS / DB genişlemesi: çift diploma vb. kısa rozet metni. */
   special_programs_badge?: string | null;
+  /** Kurumda 1 yıllık Foundation / hazırlık programı var mı (`has_foundation_pathway`). */
+  has_foundation_pathway?: boolean;
 }
 
 export type UniversityCountryFilter =

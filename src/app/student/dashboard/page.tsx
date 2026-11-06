@@ -29,6 +29,7 @@ import {
   getPublicLibrariesAction,
   startSelfPacedDiagnosticDrillFormAction,
   startSelfPacedExamFormAction,
+  startSelfPacedFullMockFormAction,
   startSmartDiagnosticSelfPacedExamFormAction,
 } from '@/app/student/public-library-actions';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
@@ -112,6 +113,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
   const emptyGoalsContext: StudentGoalsContext = {
     targetScores: {},
     targetUniversityIds: [],
+    interestTags: [],
     organization: null,
     universities: [],
     hasGoals: false,
@@ -259,6 +261,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             publicLibraries={publicLibraries}
             onStartMiniMock={startSelfPacedExamFormAction}
             onStartDiagnosticDrill={startSelfPacedDiagnosticDrillFormAction}
+            onStartFullMock={startSelfPacedFullMockFormAction}
             onStartDiagnosticExam={startSmartDiagnosticSelfPacedExamFormAction}
             academicTranscript={academicTranscript}
             transcriptStudentIdentity={transcriptStudentIdentity}

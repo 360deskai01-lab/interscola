@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
@@ -23,6 +24,13 @@ const NAV_ITEMS: StudentSidebarNavItem[] = [
   { id: 'assignments', label: 'Ödevlerim & Çalışmalar', emoji: '📚' },
   { id: 'messages', label: 'Eğitmen Mesajları', emoji: '💬' },
 ];
+
+const HUB_LINKS = [
+  { href: '/student/goals', label: 'Hedeflerim & Rota', emoji: '🎯' },
+  { href: '/student/connections', label: 'Bağlantılarım', emoji: '🤝' },
+  { href: '/student/profile', label: 'Akademik Profil', emoji: '🎓' },
+  { href: '/student/studio', label: 'AI Sınav Üretici', emoji: '✨', beta: true },
+] as const;
 
 interface StudentSidebarProps {
   activeTab: StudentDashboardTab;
@@ -101,6 +109,35 @@ export function StudentSidebar({
             );
           })}
         </nav>
+
+        <div className="mt-5 border-t border-white/10 pt-4">
+          <p className="mb-2 px-1 text-[10px] font-medium tracking-wide text-slate-600 uppercase">
+            Merkezler
+          </p>
+          <ul className="flex flex-col gap-1.5">
+            {HUB_LINKS.map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className="group flex items-center gap-2.5 rounded-xl border border-transparent bg-white/[0.02] px-3 py-2 text-left text-sm font-medium text-slate-400 transition hover:border-indigo-400/25 hover:bg-indigo-500/[0.08] hover:text-indigo-50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                >
+                  <span
+                    className="text-base leading-none transition group-hover:scale-105"
+                    aria-hidden
+                  >
+                    {link.emoji}
+                  </span>
+                  <span className="min-w-0 flex-1">{link.label}</span>
+                  {'beta' in link && link.beta ? (
+                    <span className="shrink-0 rounded-md border border-violet-400/40 bg-violet-500/20 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-violet-100">
+                      BETA
+                    </span>
+                  ) : null}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </aside>
   );

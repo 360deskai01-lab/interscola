@@ -6,6 +6,9 @@ export interface StudentUniversityOption {
   name: string;
   country: string;
   city: string | null;
+  /** Kabul şartları özeti (`target_universities`). */
+  minSatScore: number | null;
+  minIeltsBand: number | null;
 }
 
 export interface StudentOrganizationLink {
@@ -16,6 +19,8 @@ export interface StudentOrganizationLink {
 export interface StudentGoalsContext {
   targetScores: StudentTargetScores;
   targetUniversityIds: string[];
+  /** Hedef meslek / disiplin etiketleri (`profiles.target_interest_tags`). */
+  interestTags: string[];
   organization: StudentOrganizationLink | null;
   universities: StudentUniversityOption[];
   /** Hedef skor veya üniversite seçimi tanımlı mı? */
@@ -25,6 +30,8 @@ export interface StudentGoalsContext {
 export interface UpdateStudentGoalsPayload {
   targetScores: StudentTargetScores;
   targetUniversityIds: string[];
+  /** İlgi / hedef alan etiketleri (normalize edilmiş dize listesi). */
+  interestTags?: string[];
 }
 
 export interface JoinOrganizationResult {

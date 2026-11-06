@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { DiagnosticExploreLink } from '@/components/universities/DiagnosticExploreLink';
+import { FoundationPathwayBadge } from '@/components/universities/FoundationPathwayBadge';
 import { UniversityDetailModal } from '@/components/universities/UniversityDetailModal';
 import { getUniversityDisplayBadges } from '@/lib/budget-simulator/university-enrichment';
 import { UniversityCardMatchBlock } from '@/components/universities/UniversityCard';
@@ -562,6 +563,10 @@ export function UniversityExplorer({
                         className="mt-0 w-full rounded-lg text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400/60"
                       >
                         <div className="mt-2 flex flex-wrap gap-1.5">
+                          <FoundationPathwayBadge
+                            university={university}
+                            compact
+                          />
                           <span
                             className={`${badgeClass} border-indigo-400/35 bg-indigo-500/12 text-indigo-100`}
                           >

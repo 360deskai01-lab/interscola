@@ -11,9 +11,19 @@ import {
   resolveExamPayloadForLibrary,
   type PublicLibraryExamSource,
 } from '@/lib/library-exam-generation';
-import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
+import {
+  ATTEMPTS_TABLE,
+  getSupabaseAdmin,
+  PROFILES_SCHEMA,
+} from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { isLibraryId } from '@/lib/uuid-patterns';
+import {
+  FULL_MOCK_MIN_DURATION_MINUTES,
+  displayDurationMinutes,
+  resolveLibraryExamFormat,
+  type LibraryExamFormat,
+} from '@/lib/exam/library-exam-format';
 import { resolveDiagnosticLibrary } from '@/lib/test-et/resolve-diagnostic-library';
 import {
   decorateExamForSessionFormat,
@@ -32,6 +42,23 @@ export interface PublicLibraryItem {
   extractedText: string | null;
   createdAt: string;
   hasExam: boolean;
+  /** `libraries.exam_format` (veya soru sayısından çıkarım). */
+  examFormat: LibraryExamFormat;
+  /** Hazır `exam_payload` içindeki soru sayısı (yoksa null). */
+  storedQuestionCount: number | null;
+  /** Hazır `exam_payload` süresi (dk); yoksa null. */
+  storedDurationMinutes: number | null;
+  /** Tam simülasyon kartı için gösterilecek süre (dk). */
+  fullMockDurationMinutes: number;
+  /** Öğrencinin bu materyalde daha önce aldığı en son sonuç (yoksa null). */
+  lastResult: PublicLibraryLastResult | null;
+}
+
+export interface PublicLibraryLastResult {
+  /** Tamamlanmış oturum var mı? */
+  solved: boolean;
+  scaledResult: string | null;
+  attemptedAt: string | null;
 }
 
 async function getProfilesClient() {
@@ -81,15 +108,19 @@ function isMissingPublicLibraryColumnError(error: {
   );
 }
 
-function mapPublicLibraryRow(row: {
-  id: string;
-  title: string;
-  curriculum: string;
-  subject: string | null;
-  extracted_text: string | null;
-  created_at: string;
-  exam_payload?: unknown;
-}): PublicLibraryItem {
+function mapPublicLibraryRow(
+  row: {
+    id: string;
+    title: string;
+    curriculum: string;
+    subject: string | null;
+    extracted_text: string | null;
+    created_at: string;
+    exam_payload?: unknown;
+    exam_format?: unknown;
+  },
+  lastResult: PublicLibraryLastResult | null,
+): PublicLibraryItem {
   const source: PublicLibraryExamSource = {
     title: row.title,
     curriculum: row.curriculum,
@@ -97,6 +128,17 @@ function mapPublicLibraryRow(row: {
     extracted_text: row.extracted_text,
     exam_payload: row.exam_payload ?? null,
   };
+
+  const stored = assessmentPayloadFromJsonb(row.exam_payload ?? null);
+  const storedQuestionCount = stored?.questions.length ?? null;
+  const storedDurationMinutes =
+    stored && Number.isFinite(stored.durationMinutes)
+      ? stored.durationMinutes
+      : null;
+  const examFormat = resolveLibraryExamFormat(
+    row.exam_format,
+    storedQuestionCount,
+  );
 
   return {
     id: row.id,
@@ -106,7 +148,106 @@ function mapPublicLibraryRow(row: {
     extractedText: row.extracted_text,
     createdAt: row.created_at,
     hasExam: libraryHasExamCapability(source),
+    examFormat,
+    storedQuestionCount,
+    storedDurationMinutes,
+    fullMockDurationMinutes: displayDurationMinutes(
+      'full_mock',
+      storedDurationMinutes,
+    ),
+    lastResult,
   };
+}
+
+/**
+ * Öğrencinin kendi başlattığı (öğretmensiz) denemelerinden materyal başına
+ * en son sonucu çıkarır. Hata durumunda boş harita döner: rozet eksik kalır,
+ * kütüphane listesi bozulmaz.
+ */
+async function loadLastResultsByLibrary(
+  client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
+  studentId: string,
+  libraryIds: string[],
+): Promise<Map<string, PublicLibraryLastResult>> {
+  const out = new Map<string, PublicLibraryLastResult>();
+  if (libraryIds.length === 0) return out;
+
+  const { data: assignmentRows, error: assignmentError } = await client
+    .from('assignments')
+    .select('id, library_id, status')
+    .eq('student_id', studentId)
+    .is('teacher_id', null)
+    .eq('assignment_type', 'exam')
+    .in('library_id', libraryIds);
+
+  if (assignmentError) {
+    console.error(
+      '[public-library] Çözüm geçmişi okunamadı:',
+      assignmentError.message,
+    );
+    return out;
+  }
+
+  const assignments = (assignmentRows ?? []) as {
+    id: string;
+    library_id: string | null;
+    status: string;
+  }[];
+  if (assignments.length === 0) return out;
+
+  const libraryByAssignment = new Map<string, string>();
+  for (const row of assignments) {
+    if (!row.library_id) continue;
+    libraryByAssignment.set(row.id, row.library_id);
+    if (row.status === 'completed') {
+      out.set(row.library_id, {
+        solved: true,
+        scaledResult: null,
+        attemptedAt: null,
+      });
+    }
+  }
+
+  const attemptsClient = getSupabaseAdmin('interscola');
+  if (!attemptsClient) return out;
+
+  const { data: attemptRows, error: attemptsError } = await attemptsClient
+    .from(ATTEMPTS_TABLE)
+    .select('assignment_id, scaled_result, created_at')
+    .in('assignment_id', [...libraryByAssignment.keys()])
+    .order('created_at', { ascending: false });
+
+  if (attemptsError) {
+    console.error(
+      '[public-library] Deneme skorları okunamadı:',
+      attemptsError.message,
+    );
+    return out;
+  }
+
+  const seen = new Set<string>();
+  for (const attempt of attemptRows ?? []) {
+    const item = attempt as {
+      assignment_id: string | null;
+      scaled_result: string | null;
+      created_at: string | null;
+    };
+    const libraryId = item.assignment_id
+      ? libraryByAssignment.get(item.assignment_id)
+      : undefined;
+    if (!libraryId || seen.has(libraryId)) continue;
+    seen.add(libraryId);
+    out.set(libraryId, {
+      solved: true,
+      scaledResult:
+        typeof item.scaled_result === 'string' && item.scaled_result.trim()
+          ? item.scaled_result.trim()
+          : null,
+      attemptedAt: item.created_at ?? null,
+    });
+  }
+
+  return out;
 }
 
 /**
@@ -140,21 +281,33 @@ export async function getPublicLibrariesAction(curriculum?: string): Promise<{
       return { success: false, error: 'Geçersiz müfredat filtresi.' };
     }
 
-    let query = client
-      .from('libraries')
-      .select(
-        'id, title, curriculum, subject, extracted_text, created_at, exam_payload',
-      )
-      .eq('is_public', true)
-      .eq('verification_status', 'verified')
-      .order('created_at', { ascending: false });
+    const buildQuery = (columns: string) => {
+      let query = client
+        .from('libraries')
+        .select(columns)
+        .eq('is_public', true)
+        .eq('verification_status', 'verified')
+        .order('created_at', { ascending: false });
 
-    if (normalizedFilter) {
-      query = query.eq('curriculum', normalizedFilter);
+      if (normalizedFilter) {
+        query = query.eq('curriculum', normalizedFilter);
+      }
+      // Filtre yokken tüm doğrulanmış açık havuz (SAT / IELTS / CAIE) listelenir.
+      return query;
+    };
+
+    const baseColumns =
+      'id, title, curriculum, subject, extracted_text, created_at, exam_payload';
+
+    // FAZ C migration'ı uygulanmamışsa `exam_format` yoktur: havuzu kaybetmeden
+    // eski sütun kümesiyle yeniden dene (format soru sayısından çıkarılır).
+    let { data, error } = await buildQuery(`${baseColumns}, exam_format`);
+    if (error?.code === '42703') {
+      console.warn(
+        '[public-library] exam_format sütunu yok; soru sayısından çıkarım yapılacak.',
+      );
+      ({ data, error } = await buildQuery(baseColumns));
     }
-    // Filtre yokken tüm doğrulanmış açık havuz (SAT / IELTS / CAIE) listelenir.
-
-    let { data, error } = await query;
 
     if (error && isMissingPublicLibraryColumnError(error)) {
       console.warn(
@@ -169,8 +322,16 @@ export async function getPublicLibrariesAction(curriculum?: string): Promise<{
       return { success: false, error: 'Açık kütüphane yüklenemedi.' };
     }
 
-    const libraries = ((data ?? []) as Parameters<typeof mapPublicLibraryRow>[0][]).map(
-      mapPublicLibraryRow,
+    const rows = (data ?? []) as unknown as Parameters<
+      typeof mapPublicLibraryRow
+    >[0][];
+    const lastResults = await loadLastResultsByLibrary(
+      client,
+      student.userId,
+      rows.map((row) => row.id),
+    );
+    const libraries = rows.map((row) =>
+      mapPublicLibraryRow(row, lastResults.get(row.id) ?? null),
     );
 
     return { success: true, libraries };
@@ -600,6 +761,84 @@ export async function startSelfPacedExamAction(
 }
 
 /**
+ * Resmi tam simülasyon: hazır `exam_payload` kırpılmadan açılır (LLM üretimi yok).
+ * Mini/drill akışından farkı: soru sayısı kısaltılmaz, süre en az 120 dk tutulur.
+ */
+export async function startSelfPacedFullMockAction(libraryId: string): Promise<{
+  success: boolean;
+  error?: string;
+  assignmentId?: string;
+}> {
+  try {
+    const student = await requireApprovedStudent();
+    if (!student) {
+      return {
+        success: false,
+        error: 'Bu işlem için onaylı bir öğrenci hesabı gerekiyor.',
+      };
+    }
+
+    const normalizedLibraryId = libraryId.trim();
+    if (!isLibraryId(normalizedLibraryId)) {
+      return { success: false, error: 'Geçersiz materyal kimliği.' };
+    }
+
+    const client = await getProfilesClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const inProgressId = await findInProgressSelfPracticeAssignment(
+      client,
+      student.userId,
+      normalizedLibraryId,
+    );
+    if (inProgressId) {
+      return { success: true, assignmentId: inProgressId };
+    }
+
+    const loaded = await loadVerifiedPublicLibrary(client, normalizedLibraryId);
+    if (!loaded.ok) {
+      return { success: false, error: loaded.error };
+    }
+
+    const storedExam = assessmentPayloadFromJsonb(loaded.row.exam_payload);
+    if (!storedExam || storedExam.questions.length === 0) {
+      return {
+        success: false,
+        error: 'Bu tam simülasyonun sınav verisi henüz hazır değil.',
+      };
+    }
+
+    const examPayload: AssessmentPayload = {
+      ...storedExam,
+      durationMinutes: Math.max(
+        storedExam.durationMinutes,
+        FULL_MOCK_MIN_DURATION_MINUTES,
+      ),
+    };
+
+    const created = await insertNewSelfPacedAssignment(
+      client,
+      student.userId,
+      normalizedLibraryId,
+      examPayload,
+    );
+    if (!created.ok) {
+      return { success: false, error: created.error };
+    }
+
+    return { success: true, assignmentId: created.assignmentId };
+  } catch (error) {
+    console.error(
+      '[public-library] startSelfPacedFullMockAction hatası:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Tam simülasyon başlatılamadı.' };
+  }
+}
+
+/**
  * Profildeki birincil hedef sınavına göre teşhis materyali seçer ve başlatır.
  */
 export async function startSmartDiagnosticSelfPacedExamAction(): Promise<{
@@ -671,6 +910,16 @@ export async function startSelfPacedDiagnosticDrillFormAction(
   assignmentId?: string;
 }> {
   return startSelfPacedExamAction(libraryId, { format: 'diagnostic_drill' });
+}
+
+export async function startSelfPacedFullMockFormAction(
+  libraryId: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  assignmentId?: string;
+}> {
+  return startSelfPacedFullMockAction(libraryId);
 }
 
 export async function startDiagnosticSelfPacedExamFormAction(

@@ -1,4 +1,5 @@
 import type { University } from '@/lib/universities/types';
+import { attachFoundationFlags } from '@/lib/universities/foundation-flags';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabasePublicAnon } from '@/lib/supabase/public-anon';
@@ -110,7 +111,10 @@ export async function fetchTargetUniversityBySlug(
       }
       return null;
     }
-    return mapTargetUniversityRow(legacy.data as TargetUniversityRow);
+    const [withFlag] = await attachFoundationFlags(client, [
+      mapTargetUniversityRow(legacy.data as TargetUniversityRow),
+    ]);
+    return withFlag ?? null;
   }
 
   if (publishedQuery.error || !publishedQuery.data) {
@@ -124,5 +128,8 @@ export async function fetchTargetUniversityBySlug(
     return null;
   }
 
-  return mapTargetUniversityRow(publishedQuery.data as TargetUniversityRow);
+  const [withFlag] = await attachFoundationFlags(client, [
+    mapTargetUniversityRow(publishedQuery.data as TargetUniversityRow),
+  ]);
+  return withFlag ?? null;
 }

@@ -7,6 +7,7 @@ import type {
   StudentLatestScores,
   University,
 } from '@/app/universities/actions';
+import { FOUNDATION_GAP_NOTE } from '@/components/universities/FoundationPathwayBadge';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   caieGradeMeetsALevelThreshold,
@@ -241,6 +242,8 @@ export function AcceptanceMatchStatus({
   const showDiagnosticBridge =
     variant === 'detail' && (needsCta || needsAlevelCta || hasGap);
 
+  const showFoundationNote = university.has_foundation_pathway === true && hasGap;
+
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       <p
@@ -249,6 +252,14 @@ export function AcceptanceMatchStatus({
         Kabul Şansı Durumu
       </p>
       {lines.length > 0 ? <div className="space-y-2">{lines}</div> : null}
+      {showFoundationNote ? (
+        <div
+          className={`rounded-lg border border-teal-400/35 bg-teal-500/10 px-3 py-2 leading-snug text-teal-100 ${compact ? 'text-[11px]' : 'text-sm'}`}
+        >
+          <span aria-hidden>🎓 </span>
+          {FOUNDATION_GAP_NOTE}
+        </div>
+      ) : null}
       {needsAlevelCta ? (
         <ScoreLine tone="cta" compact={compact}>
           <CaieExploreCtaLink compact={compact} />

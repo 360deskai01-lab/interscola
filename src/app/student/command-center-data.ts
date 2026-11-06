@@ -15,6 +15,7 @@ import {
   mapTargetUniversityRow,
   TARGET_UNIVERSITY_SELECT,
 } from '@/lib/universities/repository';
+import { attachFoundationFlags } from '@/lib/universities/foundation-flags';
 import type { University } from '@/lib/universities/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getCurrentProfile } from '@/lib/auth';
@@ -51,9 +52,10 @@ async function fetchPinnedUniversities(
     byId.set(mapped.id, mapped);
   }
 
-  return ordered
+  const pinned = ordered
     .map((id) => byId.get(id))
     .filter((item): item is University => item !== undefined);
+  return attachFoundationFlags(client, pinned);
 }
 
 export async function getStudentCommandCenterDataAction(): Promise<{

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { Building2, Radar, Target } from 'lucide-react';
+import { FoundationPathwayBadge } from '@/components/universities/FoundationPathwayBadge';
 import { UniversityCardMediaHeader } from '@/components/universities/UniversityVisualMedia';
 import type { ReactNode } from 'react';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
@@ -157,8 +158,9 @@ function PinnedUniversityCard({
           </dd>
         </div>
       </dl>
-      <div className="mt-3">
+      <div className="mt-3 space-y-1.5">
         <MatchBadge status={badge} />
+        <FoundationPathwayBadge university={university} compact />
       </div>
       </div>
     </Link>

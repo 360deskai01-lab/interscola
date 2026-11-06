@@ -5,6 +5,7 @@ import { Building2, Compass, GraduationCap, Target } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { CareerHybridSynthesisCard } from '@/components/career/CareerHybridSynthesisCard';
 import { CareerInventoryTriad } from '@/components/career/CareerInventoryTriad';
+import { CareerRadarChart } from '@/components/student/CareerRadarChart';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 import type { UniversityThresholdProgress } from '@/lib/student-dashboard/university-threshold-progress';
 import {
@@ -15,8 +16,12 @@ import {
 
 interface StudentCareerAcademicCockpitProps {
   data: StudentCommandCenterData;
-  /** Sidebar: kariyer sekmesinde yalnızca envanter sütunu. */
-  view?: 'full' | 'career';
+  /**
+   * `full` — iki sütun (kariyer + üniversite); `career` — yalnızca kariyer sütunu;
+   * `careerOverview` — genel bakış sırası için kariyer + bilişsel radar;
+   * `university` — yalnızca hedef üniversite / SMART MATCH sütunu.
+   */
+  view?: 'full' | 'career' | 'careerOverview' | 'university';
 }
 
 function ThresholdBar({
@@ -61,6 +66,87 @@ function ThresholdBar({
           {formatValue(progress.required)}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function UniversityColumn({
+  universityThresholds,
+  goals,
+  recentScores,
+  matchScores,
+}: {
+  universityThresholds: UniversityThresholdProgress[];
+  goals: StudentCommandCenterData['goals'];
+  recentScores: StudentCommandCenterData['recentScores'];
+  matchScores: StudentCommandCenterData['matchScores'];
+}): ReactNode {
+  const satTarget = parseTargetNumber(goals.targetScores.SAT);
+  const ieltsTarget = parseTargetNumber(goals.targetScores.IELTS);
+  const showPersonalTargets = satTarget !== null || ieltsTarget !== null;
+  const showThresholds = universityThresholds.length > 0;
+
+  return (
+    <div className="rounded-2xl border border-cyan-400/20 bg-slate-950/50 p-4 sm:p-5">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-200/90">
+        <GraduationCap className="size-3.5" />
+        Hedef üniversite kabul barajları
+      </p>
+
+      {showThresholds ? (
+        <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
+          {universityThresholds.map((item) => (
+            <UniversityThresholdCard key={item.universityId} item={item} />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-5 text-center">
+          <p className="text-sm text-slate-300">Henüz hedef üniversite pinlenmedi</p>
+          <p className="mt-2 text-xs text-slate-500">
+            Bocconi, TUM, Polimi gibi okulları hedeflerine ekleyince SAT / IELTS
+            baraj ilerlemen burada görünür.
+          </p>
+          <Link
+            href="/student/dashboard?goals=open"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/12 px-4 py-2 text-xs font-semibold text-cyan-100"
+          >
+            <Target className="size-3.5" />
+            Hedef üniversiteleri seç
+          </Link>
+        </div>
+      )}
+
+      {showPersonalTargets ? (
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            Kişisel hedef skorların
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {satTarget !== null ? (
+              <PersonalTargetChip
+                label="SAT"
+                current={recentScores.satScore ?? matchScores.satScore}
+                target={satTarget}
+                format={(n) => String(Math.round(n))}
+              />
+            ) : null}
+            {ieltsTarget !== null ? (
+              <PersonalTargetChip
+                label="IELTS"
+                current={recentScores.ieltsBand ?? matchScores.ieltsBand}
+                target={ieltsTarget}
+                format={(n) => n.toFixed(1)}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="mt-4 text-right text-[11px]">
+        <Link href="/universities" className="text-sky-300 hover:underline">
+          Üniversite rehberi →
+        </Link>
+      </p>
     </div>
   );
 }
@@ -110,17 +196,175 @@ function UniversityThresholdCard({
   );
 }
 
+function CareerColumn({
+  career,
+}: {
+  career: StudentCommandCenterData['career'];
+}): ReactNode {
+  return (
+    <div className="rounded-2xl border border-violet-400/20 bg-slate-950/50 p-4 sm:p-5">
+      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-200/90">
+        <Compass className="size-3.5" />
+        Kariyer & yetkinlik özeti
+      </p>
+
+      {career.hasAssessment ? (
+        <div className="mt-4 space-y-4">
+          <div>
+            <p className="text-[11px] text-slate-500">Holland kodu</p>
+            <p className="mt-1 text-base font-semibold text-slate-50">
+              {career.hollandCode}{' '}
+              <span className="font-normal text-slate-400">
+                — {career.hollandTitle?.replace(/^[^:]+:\s*/, '')}
+              </span>
+            </p>
+          </div>
+          {career.topTraits.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {career.topTraits.map((trait) => (
+                <span
+                  key={trait}
+                  className="rounded-full border border-violet-400/30 bg-violet-500/12 px-2.5 py-0.5 text-[10px] font-medium text-violet-100"
+                >
+                  {trait}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <CareerInventoryTriad cards={career.inventoryTriad.cards} compact />
+          <CareerHybridSynthesisCard
+            synthesis={career.inventoryTriad.synthesis}
+            progressPercent={career.inventoryTriad.progressPercent}
+            completedStageCount={career.inventoryTriad.completedStageCount}
+            totalStages={career.inventoryTriad.totalStages}
+          />
+          {career.aiInterpretation ? (
+            <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">
+              {career.aiInterpretation}
+            </p>
+          ) : null}
+          <Link
+            href="/career-compass"
+            className="inline-flex text-xs font-medium text-indigo-300 hover:text-indigo-200"
+          >
+            Pusulayı yenile veya derinleştir →
+          </Link>
+        </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-amber-400/30 bg-amber-500/5 p-5 text-center">
+          <p className="text-sm font-medium text-amber-100">
+            Henüz Kariyer Pusulası çözülmedi
+          </p>
+          <p className="mt-2 text-xs text-slate-400">
+            12 dakikalık hızlı envanter ile Holland profilin ve güçlü yönlerin
+            burada görünür.
+          </p>
+          <Link
+            href="/career-compass"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-4 py-2.5 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/25"
+          >
+            <span aria-hidden>🚀</span>
+            12 Dakikalık Pusulayı Başlat
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StudentCareerAcademicCockpit({
   data,
   view = 'full',
 }: StudentCareerAcademicCockpitProps): ReactNode {
   const { goals, career, universityThresholds, recentScores, matchScores } =
     data;
-  const satTarget = parseTargetNumber(goals.targetScores.SAT);
-  const ieltsTarget = parseTargetNumber(goals.targetScores.IELTS);
 
-  const showPersonalTargets = satTarget !== null || ieltsTarget !== null;
-  const showThresholds = universityThresholds.length > 0;
+  if (view === 'university') {
+    return (
+      <section
+        aria-labelledby="smart-match-university-heading"
+        className="space-y-5 rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.07] via-slate-950/90 to-indigo-500/[0.06] p-5 sm:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200/90">
+              Smart Match
+            </p>
+            <h2
+              id="smart-match-university-heading"
+              className="mt-1 text-lg font-semibold text-slate-50"
+            >
+              Hedef Üniversiteler & Kabul Uyumu (SMART MATCH)
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-slate-400">
+              Pinlediğin okulların SAT / IELTS barajları ve hedefe kalan puan
+              açığın.
+            </p>
+          </div>
+        </div>
+        <UniversityColumn
+          universityThresholds={universityThresholds}
+          goals={goals}
+          recentScores={recentScores}
+          matchScores={matchScores}
+        />
+      </section>
+    );
+  }
+
+  if (view === 'careerOverview') {
+    const radarPoints = (career.radarData ?? []).map((p) => ({
+      axis: p.axis,
+      value: p.value,
+    }));
+
+    return (
+      <section
+        aria-labelledby="career-radar-overview-heading"
+        className="space-y-5 rounded-2xl border border-violet-400/25 bg-gradient-to-br from-violet-500/[0.08] via-slate-950/90 to-indigo-500/[0.07] p-5 sm:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-violet-200/90">
+              Kariyer & bilişsel profil
+            </p>
+            <h2
+              id="career-radar-overview-heading"
+              className="mt-1 text-lg font-semibold text-slate-50"
+            >
+              Kariyer Pusulası & Bilişsel Radar Kartı
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-slate-400">
+              24 soruluk Kariyer Pusulası envanteri özeti ve çok boyutlu bilişsel
+              radar görünümü.
+            </p>
+          </div>
+          {goals.organization ? (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+              <Building2 className="size-4 shrink-0" />
+              <span>{goals.organization.orgName}</span>
+            </div>
+          ) : null}
+        </div>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <CareerColumn career={career} />
+          <div className="rounded-2xl border border-indigo-400/20 bg-slate-950/50 p-4 sm:p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-200/90">
+              Bilişsel radar (360°)
+            </p>
+            <div className="mt-3">
+              <CareerRadarChart
+                data={radarPoints}
+                className="h-56 w-full sm:h-64"
+                title={undefined}
+                emptyHint="Radar için önce Kariyer Pusulası envanterini tamamla."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
@@ -155,141 +399,15 @@ export function StudentCareerAcademicCockpit({
       <div
         className={`grid gap-5 ${view === 'full' ? 'lg:grid-cols-2' : 'grid-cols-1'}`}
       >
-        <div className="rounded-2xl border border-violet-400/20 bg-slate-950/50 p-4 sm:p-5">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-200/90">
-            <Compass className="size-3.5" />
-            Kariyer & yetkinlik özeti
-          </p>
-
-          {career.hasAssessment ? (
-            <div className="mt-4 space-y-4">
-              <div>
-                <p className="text-[11px] text-slate-500">Holland kodu</p>
-                <p className="mt-1 text-base font-semibold text-slate-50">
-                  {career.hollandCode}{' '}
-                  <span className="font-normal text-slate-400">
-                    — {career.hollandTitle?.replace(/^[^:]+:\s*/, '')}
-                  </span>
-                </p>
-              </div>
-              {career.topTraits.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {career.topTraits.map((trait) => (
-                    <span
-                      key={trait}
-                      className="rounded-full border border-violet-400/30 bg-violet-500/12 px-2.5 py-0.5 text-[10px] font-medium text-violet-100"
-                    >
-                      {trait}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              <CareerInventoryTriad
-                cards={career.inventoryTriad.cards}
-                compact
-              />
-              <CareerHybridSynthesisCard
-                synthesis={career.inventoryTriad.synthesis}
-                progressPercent={career.inventoryTriad.progressPercent}
-                completedStageCount={career.inventoryTriad.completedStageCount}
-                totalStages={career.inventoryTriad.totalStages}
-              />
-              {career.aiInterpretation ? (
-                <p className="line-clamp-4 text-xs leading-relaxed text-slate-400">
-                  {career.aiInterpretation}
-                </p>
-              ) : null}
-              <Link
-                href="/career-compass"
-                className="inline-flex text-xs font-medium text-indigo-300 hover:text-indigo-200"
-              >
-                Pusulayı yenile veya derinleştir →
-              </Link>
-            </div>
-          ) : (
-            <div className="mt-6 rounded-xl border border-dashed border-amber-400/30 bg-amber-500/5 p-5 text-center">
-              <p className="text-sm font-medium text-amber-100">
-                Henüz Kariyer Pusulası çözülmedi
-              </p>
-              <p className="mt-2 text-xs text-slate-400">
-                12 dakikalık hızlı envanter ile Holland profilin ve güçlü
-                yönlerin burada görünür.
-              </p>
-              <Link
-                href="/career-compass"
-                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-4 py-2.5 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/25"
-              >
-                <span aria-hidden>🚀</span>
-                12 Dakikalık Pusulayı Başlat
-              </Link>
-            </div>
-          )}
-        </div>
+        <CareerColumn career={career} />
 
         {view === 'career' ? null : (
-        <div className="rounded-2xl border border-cyan-400/20 bg-slate-950/50 p-4 sm:p-5">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-cyan-200/90">
-            <GraduationCap className="size-3.5" />
-            Hedef üniversite kabul barajları
-          </p>
-
-          {showThresholds ? (
-            <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
-              {universityThresholds.map((item) => (
-                <UniversityThresholdCard key={item.universityId} item={item} />
-              ))}
-            </div>
-          ) : (
-            <div className="mt-6 rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-5 text-center">
-              <p className="text-sm text-slate-300">
-                Henüz hedef üniversite pinlenmedi
-              </p>
-              <p className="mt-2 text-xs text-slate-500">
-                Bocconi, TUM, Polimi gibi okulları hedeflerine ekleyince SAT /
-                IELTS baraj ilerlemen burada görünür.
-              </p>
-              <Link
-                href="/student/dashboard?goals=open"
-                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-cyan-400/35 bg-cyan-500/12 px-4 py-2 text-xs font-semibold text-cyan-100"
-              >
-                <Target className="size-3.5" />
-                Hedef üniversiteleri seç
-              </Link>
-            </div>
-          )}
-
-          {showPersonalTargets ? (
-            <div className="mt-4 border-t border-white/10 pt-4">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                Kişisel hedef skorların
-              </p>
-              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                {satTarget !== null ? (
-                  <PersonalTargetChip
-                    label="SAT"
-                    current={recentScores.satScore ?? matchScores.satScore}
-                    target={satTarget}
-                    format={(n) => String(Math.round(n))}
-                  />
-                ) : null}
-                {ieltsTarget !== null ? (
-                  <PersonalTargetChip
-                    label="IELTS"
-                    current={recentScores.ieltsBand ?? matchScores.ieltsBand}
-                    target={ieltsTarget}
-                    format={(n) => n.toFixed(1)}
-                  />
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
-          <p className="mt-4 text-right text-[11px]">
-            <Link href="/universities" className="text-sky-300 hover:underline">
-              Üniversite rehberi →
-            </Link>
-          </p>
-        </div>
+          <UniversityColumn
+            universityThresholds={universityThresholds}
+            goals={goals}
+            recentScores={recentScores}
+            matchScores={matchScores}
+          />
         )}
       </div>
     </section>

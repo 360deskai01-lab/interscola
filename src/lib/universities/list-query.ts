@@ -8,6 +8,7 @@ import {
   type UniversityExamFilter,
   type UniversitySortBy,
 } from '@/lib/universities/explorer-config';
+import { attachFoundationFlags } from '@/lib/universities/foundation-flags';
 import {
   mapTargetUniversityRow,
   TARGET_UNIVERSITY_SELECT,
@@ -195,9 +196,10 @@ export async function fetchPublishedUniversitiesList(
     const safePage = Math.min(page, totalPages);
     const from = (safePage - 1) * pageSize;
     return {
-      universities: sorted
-        .slice(from, from + pageSize)
-        .map(mapTargetUniversityRow),
+      universities: await attachFoundationFlags(
+        client,
+        sorted.slice(from, from + pageSize).map(mapTargetUniversityRow),
+      ),
       total,
       page: safePage,
       pageSize,
@@ -224,7 +226,10 @@ export async function fetchPublishedUniversitiesList(
   const safePage = Math.min(page, totalPages);
 
   return {
-    universities: result.rows.map(mapTargetUniversityRow),
+    universities: await attachFoundationFlags(
+      client,
+      result.rows.map(mapTargetUniversityRow),
+    ),
     total,
     page: safePage,
     pageSize,

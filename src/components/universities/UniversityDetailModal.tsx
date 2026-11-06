@@ -20,6 +20,7 @@ import type {
 } from '@/app/universities/actions';
 import { AcceptanceMatchStatus } from '@/components/universities/AcceptanceMatchStatus';
 import { DiagnosticExploreLink } from '@/components/universities/DiagnosticExploreLink';
+import { FoundationPathwayBadge } from '@/components/universities/FoundationPathwayBadge';
 import { UniversityHeroBanner } from '@/components/universities/UniversityVisualMedia';
 
 interface UniversityDetailModalProps {
@@ -161,6 +162,11 @@ export function UniversityDetailModal({
                 </a>
               ) : null}
             </div>
+            {university.has_foundation_pathway ? (
+              <div className="mt-2">
+                <FoundationPathwayBadge university={university} />
+              </div>
+            ) : null}
             <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
               <span>{university.country}</span>
               {university.city ? (

@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 import { getStudentLatestScoresAction, type University } from '@/app/universities/actions';
 import { fetchTargetUniversityBySlugCached } from '@/lib/universities/cached-university';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
+import { FoundationPathwayBadge } from '@/components/universities/FoundationPathwayBadge';
 import { UniversityDetailStickyCta } from '@/components/universities/UniversityDetailStickyCta';
 import { UniversityHeroBanner } from '@/components/universities/UniversityVisualMedia';
 import { absoluteUrl } from '@/lib/seo/site-url';
@@ -151,6 +152,11 @@ function UniversityMainColumn({ university }: { university: University }): React
                 </>
               ) : null}
             </p>
+            {university.has_foundation_pathway ? (
+              <div className="mt-3">
+                <FoundationPathwayBadge university={university} />
+              </div>
+            ) : null}
             {university.website_url ? (
               <a
                 href={university.website_url}

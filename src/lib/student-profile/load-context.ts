@@ -45,11 +45,34 @@ export function parseUniversityIds(raw: unknown): string[] {
   );
 }
 
+/** `profiles.target_interest_tags` — kısa etiket dizisi. */
+export function parseInterestTags(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    const t = item.trim();
+    if (t.length === 0 || t.length > 64) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= 32) break;
+  }
+  return out;
+}
+
 export function computeHasGoals(
   scores: StudentTargetScores,
   universityIds: string[],
+  interestTags: string[],
 ): boolean {
-  return Object.keys(scores).length > 0 || universityIds.length > 0;
+  return (
+    Object.keys(scores).length > 0 ||
+    universityIds.length > 0 ||
+    interestTags.length > 0
+  );
 }
 
 async function loadUniversityOptions(
@@ -57,7 +80,7 @@ async function loadUniversityOptions(
 ): Promise<StudentUniversityOption[]> {
   const { data, error } = await client
     .from('target_universities')
-    .select('id, name, country, city')
+    .select('id, name, country, city, min_sat_score, min_ielts_band')
     .order('name', { ascending: true });
 
   if (error) {
@@ -71,12 +94,23 @@ async function loadUniversityOptions(
       name: string;
       country: string;
       city: string | null;
+      min_sat_score: number | null;
+      min_ielts_band: number | string | null;
     };
+    const bandRaw = item.min_ielts_band;
+    const band =
+      typeof bandRaw === 'number'
+        ? bandRaw
+        : bandRaw != null && bandRaw !== ''
+          ? Number.parseFloat(String(bandRaw))
+          : NaN;
     return {
       id: item.id,
       name: item.name,
       country: item.country,
       city: item.city,
+      minSatScore: item.min_sat_score ?? null,
+      minIeltsBand: Number.isFinite(band) ? band : null,
     };
   });
 }
@@ -141,7 +175,7 @@ export async function loadStudentGoalsContext(
   const [profileResult, universities, organization] = await Promise.all([
     client
       .from('profiles')
-      .select('target_scores, target_university_ids')
+      .select('target_scores, target_university_ids, target_interest_tags')
       .eq('id', userId)
       .maybeSingle(),
     loadUniversityOptions(client),
@@ -159,6 +193,7 @@ export async function loadStudentGoalsContext(
         data: {
           targetScores: {},
           targetUniversityIds: [],
+          interestTags: [],
           organization,
           universities,
           hasGoals: false,
@@ -171,19 +206,26 @@ export async function loadStudentGoalsContext(
   const row = profileResult.data as {
     target_scores?: unknown;
     target_university_ids?: unknown;
+    target_interest_tags?: unknown;
   } | null;
 
   const targetScores = parseTargetScores(row?.target_scores);
   const targetUniversityIds = parseUniversityIds(row?.target_university_ids);
+  const interestTags = parseInterestTags(row?.target_interest_tags);
 
   return {
     ok: true,
     data: {
       targetScores,
       targetUniversityIds,
+      interestTags,
       organization,
       universities,
-      hasGoals: computeHasGoals(targetScores, targetUniversityIds),
+      hasGoals: computeHasGoals(
+        targetScores,
+        targetUniversityIds,
+        interestTags,
+      ),
     },
   };
 }

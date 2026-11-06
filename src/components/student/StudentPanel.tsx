@@ -37,7 +37,7 @@ import type {
   StudentAnalyticsData,
   StudentAssignment,
 } from '@/app/student/actions';
-import { StudentAnalyticsSection } from '@/components/student/StudentAnalyticsSection';
+import { StudentPerformanceOverviewSection } from '@/components/student/StudentPerformanceOverviewSection';
 import { StudentExploreSection } from '@/components/student/StudentExploreSection';
 import type { PublicLibraryItem } from '@/app/student/public-library-actions';
 import type {
@@ -110,6 +110,11 @@ interface StudentPanelProps {
     assignmentId?: string;
   }>;
   onStartDiagnosticDrill: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    assignmentId?: string;
+  }>;
+  onStartFullMock: (libraryId: string) => Promise<{
     success: boolean;
     error?: string;
     assignmentId?: string;
@@ -201,6 +206,7 @@ export function StudentPanel({
   publicLibraries,
   onStartMiniMock,
   onStartDiagnosticDrill,
+  onStartFullMock,
   onStartDiagnosticExam,
   academicTranscript,
   transcriptStudentIdentity,
@@ -432,14 +438,19 @@ export function StudentPanel({
         onSaveGoals={async (payload) => {
           const result = await onUpdateStudentGoals(payload);
           if (result.success) {
-            const hasScore = Object.keys(payload.targetScores).length > 0;
-            const hasUnis = payload.targetUniversityIds.length > 0;
-            setLocalGoalsContext((current) => ({
-              ...current,
-              targetScores: payload.targetScores,
-              targetUniversityIds: payload.targetUniversityIds,
-              hasGoals: hasScore || hasUnis,
-            }));
+            setLocalGoalsContext((current) => {
+              const hasScore = Object.keys(payload.targetScores).length > 0;
+              const hasUnis = payload.targetUniversityIds.length > 0;
+              const tags = payload.interestTags ?? current.interestTags;
+              const hasTags = tags.length > 0;
+              return {
+                ...current,
+                targetScores: payload.targetScores,
+                targetUniversityIds: payload.targetUniversityIds,
+                interestTags: tags,
+                hasGoals: hasScore || hasUnis || hasTags,
+              };
+            });
             router.refresh();
           }
           return result;
@@ -501,8 +512,15 @@ export function StudentPanel({
 
           {activeTab === 'cockpit' ? (
             <>
-              <StudentCareerAcademicCockpit data={commandCenter} />
-              <StudentAnalyticsSection analytics={analytics} />
+              <StudentPerformanceOverviewSection analytics={analytics} />
+              <StudentCareerAcademicCockpit
+                data={commandCenter}
+                view="careerOverview"
+              />
+              <StudentCareerAcademicCockpit
+                data={commandCenter}
+                view="university"
+              />
               <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
                 <h2 className="text-sm font-medium text-slate-200">
                   Hedef Sınavlarım
@@ -609,6 +627,7 @@ export function StudentPanel({
                 libraries={publicLibraries}
                 onStartMiniMock={onStartMiniMock}
                 onStartDiagnosticDrill={onStartDiagnosticDrill}
+                onStartFullMock={onStartFullMock}
                 onStartDiagnostic={handleStartDiagnosticExam}
                 primaryCurriculumLabel={primaryCurriculumLabel}
                 searchQuery={searchQuery}
