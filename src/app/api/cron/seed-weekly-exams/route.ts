@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { seedWeeklyPublicExams } from '@/lib/public-library/seed-weekly-exams';
+import { seedWeeklyPublicExams } from '@/lib/exam/seed-weekly-exams';
 
 export const maxDuration = 300;
 

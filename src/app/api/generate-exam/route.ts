@@ -78,6 +78,8 @@ const MODEL = 'gemini-3.6-flash';
  * kaynaktan beslenir; ikisi ayrı yazılsaydı zamanla birbirinden koparlardı.
  */
 const MAX_OUTPUT_TOKENS = 3_072;
+/** Çok sorulu OBJECTIVE paketlerinde kesilme riskini azaltır. */
+const MAX_OUTPUT_TOKENS_CAP = 8_192;
 
 /** Çıktının hedeflenen yaklaşık token bütçesi (prompt'ta modele bildirilir). */
 const BRIEF_TOKEN_LIMIT = MAX_OUTPUT_TOKENS;
@@ -332,6 +334,15 @@ ${input.promptContext}
 """`
     : `SOURCE MATERIAL: none supplied. Generate curriculum-authentic questions for the subject "${input.subject}".`;
 
+  const satBalancedBlock =
+    input.curriculum === 'SAT' && input.engineType === 'OBJECTIVE'
+      ? `
+SAT BALANCE (mandatory when question count is 10):
+- Use exactly half Reading & Writing style items and half Math items (${Math.floor((input.questionCount ?? 10) / 2)} R&W + ${Math.ceil((input.questionCount ?? 10) / 2)} Math for odd totals).
+- Label each question's topic in the prompt first line, e.g. "[R&W] ..." or "[Math] ...".
+`
+      : '';
+
   return `You are a Principal Examiner and assessment designer for international examinations (IELTS, Cambridge Assessment International Education, College Board SAT).
 
 TASK: Write a complete, exam-ready assessment.
@@ -340,6 +351,8 @@ SUBJECT: ${input.subject}
 CURRICULUM: ${input.curriculum}
 ENGINE TYPE: ${input.engineType}
 NUMBER OF QUESTIONS: exactly ${input.questionCount}
+
+${satBalancedBlock}
 
 ${curriculumBlueprint(input.curriculum, input.engineType)}
 
@@ -392,26 +405,62 @@ HARD RULES:
 11. Do not add any field that is not in the schema above.`;
 }
 
-function stripCodeFences(text: string): string {
-  return text
-    .replace(/^\s*```(?:json)?/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
+/**
+ * Markdown ```json ... ``` çitlerini kaldırır.
+ */
+function stripMarkdownCodeFences(text: string): string {
+  let t = text.trim();
+  t = t.replace(/^\s*```(?:json)?\s*\r?\n?/im, '');
+  t = t.replace(/\r?\n?\s*```\s*$/im, '');
+  return t.trim();
 }
 
-function extractJsonObject(text: string): JsonRecord {
-  const cleaned = stripCodeFences(text);
+/**
+ * Model metninden dengeli süslü parantezle tek JSON nesnesi ayıklar (iç içe objeler için lastIndexOf yerine).
+ * `responseMimeType: application/json` bazen yine de kaçışlı/markdown içerik dönebilir.
+ */
+export function extractJsonFromModelText(raw: string): JsonRecord {
+  const cleaned = stripMarkdownCodeFences(raw);
   const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new ModelOutputError('Model yanıtı geçerli bir JSON nesnesi içermiyor.');
+  if (start === -1) {
+    throw new ModelOutputError(
+      'Model yanıtı geçerli bir JSON nesnesi içermiyor (açılış süslü parantez yok).',
+    );
   }
 
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < cleaned.length; i += 1) {
+    const ch = cleaned[i];
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+
+  if (end === -1) {
+    throw new ModelOutputError(
+      'Model yanıtı geçerli bir JSON nesnesi içermiyor (süslü parantez dengesi bozuk veya yanıt kesik).',
+    );
+  }
+
+  const slice = cleaned.slice(start, end + 1);
   let parsed: unknown;
   try {
-    parsed = JSON.parse(cleaned.slice(start, end + 1));
-  } catch {
+    parsed = JSON.parse(slice);
+  } catch (error) {
+    console.error(
+      '[generate-exam] JSON.parse başarısız:',
+      error instanceof Error ? error.message : String(error),
+    );
+    console.error(
+      '[generate-exam] Ham parça (ilk 1200 karakter):',
+      slice.slice(0, 1200),
+    );
     throw new ModelOutputError('Model yanıtındaki JSON ayrıştırılamadı.');
   }
 
@@ -421,6 +470,34 @@ function extractJsonObject(text: string): JsonRecord {
     );
   }
   return parsed;
+}
+
+function extractJsonObject(text: string): JsonRecord {
+  return extractJsonFromModelText(text);
+}
+
+function isJsonShapeRetryable(error: unknown): boolean {
+  if (error instanceof QuestionCountMismatchError) return false;
+  if (!(error instanceof ModelOutputError)) return false;
+  const m = error.message;
+  return (
+    m.includes('JSON') ||
+    m.includes('json') ||
+    m.includes('süslü parantez') ||
+    m.includes('ayrıştırılamadı') ||
+    m.includes('içermiyor')
+  );
+}
+
+function computeMaxOutputTokens(input: GenerateExamRequest): number {
+  const count = input.questionCount ?? DEFAULT_QUESTION_COUNT;
+  if (input.engineType === 'OBJECTIVE' && count >= 8) {
+    return Math.min(
+      MAX_OUTPUT_TOKENS_CAP,
+      Math.max(MAX_OUTPUT_TOKENS, 900 + count * 320),
+    );
+  }
+  return MAX_OUTPUT_TOKENS;
 }
 
 /**
@@ -623,36 +700,75 @@ async function generateOnce(
   input: GenerateExamRequest,
   timeoutMs: number,
 ): Promise<AssessmentPayload> {
-  let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
+  const maxOutputTokens = computeMaxOutputTokens(input);
+  let lastRecoverableError: ModelOutputError | undefined;
 
-  try {
-    response = await ai.models.generateContent({
-      model: MODEL,
-      contents: buildPrompt(input),
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        // Çağrı takılırsa bütçe sınırına çarpmadan kendimiz iptal ederiz.
-        abortSignal: AbortSignal.timeout(timeoutMs),
-      },
-    });
-  } catch (error) {
-    // Zaman aşımı ve SDK'nın fırlattığı 403/429/503 gibi hatalar burada sınıflandırılır.
-    if (isTimeoutError(error)) {
-      console.error(
-        `[API] İstek ${CALL_TIMEOUT_MS / 1000} sn zaman aşımına uğradı, retry bütçesi kontrol ediliyor`,
-      );
+  for (let apiAttempt = 0; apiAttempt < 2; apiAttempt += 1) {
+    const attemptTimeout =
+      apiAttempt === 0
+        ? timeoutMs
+        : Math.max(MIN_ATTEMPT_WINDOW_MS, Math.floor(timeoutMs * 0.55));
+
+    let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
+
+    try {
+      response = await ai.models.generateContent({
+        model: MODEL,
+        contents: buildPrompt(input),
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
+          maxOutputTokens,
+          // Çağrı takılırsa bütçe sınırına çarpmadan kendimiz iptal ederiz.
+          abortSignal: AbortSignal.timeout(attemptTimeout),
+        },
+      });
+    } catch (error) {
+      // Zaman aşımı ve SDK'nın fırlattığı 403/429/503 gibi hatalar burada sınıflandırılır.
+      if (isTimeoutError(error)) {
+        console.error(
+          `[API] İstek ${CALL_TIMEOUT_MS / 1000} sn zaman aşımına uğradı, retry bütçesi kontrol ediliyor`,
+        );
+      }
+      toProviderError(error);
     }
-    toProviderError(error);
+
+    const text = response.text;
+    if (!text) {
+      const emptyErr = new ModelOutputError('Model boş yanıt döndürdü.');
+      if (apiAttempt === 0) {
+        lastRecoverableError = emptyErr;
+        console.warn('[generate-exam] Boş yanıt, tek seferlik yeniden üretim.');
+        continue;
+      }
+      throw emptyErr;
+    }
+
+    try {
+      return normalizePayload(extractJsonFromModelText(text), input);
+    } catch (error) {
+      if (
+        apiAttempt === 0 &&
+        isJsonShapeRetryable(error)
+      ) {
+        lastRecoverableError =
+          error instanceof ModelOutputError
+            ? error
+            : new ModelOutputError(String(error));
+        console.warn(
+          '[generate-exam] Model JSON/şema hatası, tek seferlik yeniden üretim:',
+          lastRecoverableError.message,
+        );
+        continue;
+      }
+      throw error;
+    }
   }
 
-  const text = response.text;
-  if (!text) {
-    throw new ModelOutputError('Model boş yanıt döndürdü.');
-  }
-
-  return normalizePayload(extractJsonObject(text), input);
+  throw (
+    lastRecoverableError ??
+    new ModelOutputError('Model çıktısı işlenemedi (yeniden deneme tükendi).')
+  );
 }
 
 /**

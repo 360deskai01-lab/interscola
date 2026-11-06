@@ -3,7 +3,8 @@ import { parseAssessmentPayload } from '@/lib/assessment-payload';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import type { AssessmentPayload } from '@/types/exam';
 
-const POOL_SAT_QUESTIONS = 11;
+/** Havuz SAT: token/latency güvenliği için 10 soru (5 R&W + 5 Math — prompt’ta zorunlu). */
+const POOL_SAT_QUESTIONS = 10;
 const POOL_IELTS_QUESTIONS = 2;
 
 function isoWeekLabel(date = new Date()): string {
@@ -83,10 +84,10 @@ export async function seedWeeklyPublicExams(): Promise<{
     const satRaw = await runGenerateExam({
       curriculum: 'SAT',
       engineType: 'OBJECTIVE',
-      subject: 'Reading & Writing / Math (balanced section practice)',
+      subject: 'Reading & Writing / Math (balanced — 5 R&W + 5 Math)',
       questionCount: POOL_SAT_QUESTIONS,
       promptContext:
-        'Generate a balanced Digital SAT section-practice set: mix Reading & Writing and Math items in one cohesive mini mock (not a full Bluebook adaptive test).',
+        'Generate a balanced Digital SAT section-practice set: exactly 5 Reading & Writing items and 5 Math items (not a full Bluebook adaptive test). Each prompt starts with [R&W] or [Math].',
     });
     const satExam = finalizePoolExam(satRaw, 'SAT', weekLabel);
     const satInsert = await insertPublicLibraryRow({
