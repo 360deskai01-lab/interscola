@@ -390,11 +390,11 @@ function mapGenerateExamFailure(error: unknown): string {
   if (error instanceof ProviderError) {
     if (error.statusCode === 403) {
       return (
-        'Google Gemini API yetkilendirme hatası (403). API anahtarını kontrol edin.'
+        'DeepSeek API yetkilendirme hatası (403). DEEPSEEK_API_KEY değerini kontrol edin.'
       );
     }
     if (error.statusCode === 429) {
-      return 'Google Gemini günlük kullanım kotası doldu.';
+      return 'DeepSeek API kullanım kotası veya hız sınırı aşıldı (429).';
     }
     return 'Sınav motoru şu anda yoğun; birkaç saniye sonra tekrar deneyin.';
   }
@@ -407,7 +407,7 @@ function mapGenerateExamFailure(error: unknown): string {
     return 'Model beklenen sınav formatına uymayan bir yanıt üretti.';
   }
 
-  if (error instanceof Error && error.message.includes('GEMINI_API_KEY')) {
+  if (error instanceof Error && error.message.includes('DEEPSEEK_API_KEY')) {
     return error.message;
   }
 

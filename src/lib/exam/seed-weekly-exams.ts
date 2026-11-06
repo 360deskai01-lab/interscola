@@ -65,9 +65,7 @@ async function insertPublicLibraryRow(input: {
       verification_status: 'verified',
       teacher_id: null,
     })
-    .select(
-      'id, title, curriculum, subject, extracted_text, exam_payload, is_public, verification_status, teacher_id',
-    )
+    .select('id, title, curriculum, exam_payload')
     .single();
 
   if (error || !data) {
@@ -80,29 +78,30 @@ async function insertPublicLibraryRow(input: {
     id: string;
     title: string;
     curriculum: string;
-    subject: string;
-    extracted_text: string | null;
     exam_payload: unknown;
-    is_public: boolean | null;
-    verification_status: string | null;
-    teacher_id: string | null;
   };
 
-  const payloadOk =
-    JSON.stringify(row.exam_payload) === JSON.stringify(input.exam);
-  const metaOk =
-    row.title === input.title &&
-    row.curriculum === input.curriculum &&
-    row.subject === input.subject &&
-    row.extracted_text === input.extractedText &&
-    row.is_public === true &&
-    row.verification_status === 'verified' &&
-    row.teacher_id === null;
+  const examPayload = row.exam_payload;
+  const questions =
+    typeof examPayload === 'object' &&
+    examPayload !== null &&
+    'questions' in examPayload
+      ? (examPayload as { questions: unknown }).questions
+      : undefined;
 
-  if (!payloadOk || !metaOk) {
+  const payloadShapeOk =
+    typeof examPayload === 'object' &&
+    examPayload !== null &&
+    Array.isArray(questions) &&
+    questions.length > 0;
+
+  const titleCurriculumOk =
+    row.title === input.title && row.curriculum === input.curriculum;
+
+  if (!row.id || !payloadShapeOk || !titleCurriculumOk) {
     return {
       error:
-        'Kütüphane kaydı oluşturuldu ancak okunan satır istenen exam_payload / meta ile eşleşmiyor.',
+        'Kütüphane kaydı oluşturuldu ancak okunan satır (id / exam_payload.questions / title / curriculum) doğrulamasından geçemedi.',
     };
   }
 

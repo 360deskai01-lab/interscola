@@ -56,7 +56,7 @@ export function mapGenerateExamFailure(error: unknown): string {
   if (error instanceof ModelOutputError) {
     return 'Model beklenen sınav formatına uymayan bir yanıt üretti.';
   }
-  if (error instanceof Error && error.message.includes('GEMINI_API_KEY')) {
+  if (error instanceof Error && error.message.includes('DEEPSEEK_API_KEY')) {
     return error.message;
   }
   return 'Sınav üretilirken beklenmeyen bir hata oluştu.';

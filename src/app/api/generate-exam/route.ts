@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
+import { APIConnectionTimeoutError, APIError } from 'openai';
+import { deepseek } from '@/lib/deepseek';
 import type {
   AssessmentPayload,
   CurriculumCode,
@@ -24,11 +25,11 @@ const MAX_QUESTION_COUNT = 12;
 /** OBJECTIVE sorularda beklenen şık sayısı. */
 const OBJECTIVE_OPTION_COUNT = 4;
 
-/** Gemini'ye gönderilen kullanıcı metni için üst sınır (karakter). */
+/** Modele gönderilen kullanıcı metni için üst sınır (karakter). */
 const MAX_PROMPT_CONTEXT_CHARS = 15_000;
 
 /**
- * Tek bir Gemini çağrısı için üst sınır. 25 saniyede kesilip 1 saniye bekleyip
+ * Tek bir DeepSeek çağrısı için üst sınır. 25 saniyede kesilip 1 saniye bekleyip
  * yeniden denenir; toplam süre böylece 60 sn platform sınırına hiç çarpmaz.
  */
 const CALL_TIMEOUT_MS = 25_000;
@@ -56,28 +57,21 @@ const MAX_RETRY_BUDGET_MS = 55_000;
 const MIN_ATTEMPT_WINDOW_MS = 10_000;
 
 /**
- * Ücretsiz katman günlük kotası dolduğunda dönen mesaj (HTTP 429).
- * Bu kalıcı bir durumdur; retry ve "birkaç saniye sonra dene" yanıltıcı olur.
+ * Kota / rate limit (HTTP 429). Metin kullanıcıya gösterilir; tekrar deneme üst katmanda olabilir.
  */
 const QUOTA_EXCEEDED_MESSAGE =
-  'Google Gemini günlük ücretsiz kullanım kotası doldu.';
+  'DeepSeek API kullanım kotası veya hız sınırı aşıldı (HTTP 429).';
 
 /**
- * Anahtarın modele/servise erişim izni olmadığında dönen mesaj (HTTP 403).
- * Aynı modelde tekrar denemek sonucu değiştirmez.
+ * Anahtar veya izin hatası (HTTP 403).
  */
 const PERMISSION_DENIED_MESSAGE =
-  'Google Gemini API yetkilendirme hatası (403 PERMISSION_DENIED). ' +
-  'Lütfen geçerli bir API anahtarı kullanın.';
+  'DeepSeek API yetkilendirme hatası (403). Lütfen geçerli bir DEEPSEEK_API_KEY kullanın.';
 
-/** Birincil üretim modeli (yoğunluk/503 veya kota/429 sonrası yedek modele düşülür). */
-const MODEL_PRIMARY = 'gemini-3.6-flash';
-/** Yoğun küme veya kota yanıtından sonra tek deneme için yedek model. */
-const MODEL_FALLBACK = 'gemini-2.5-flash';
-/** 503/429 sonrası yedek modele geçmeden önce bekleme (ms). */
-const MODEL_FALLBACK_BACKOFF_MS = 2_000;
+/** Sınav üretiminde kullanılan DeepSeek sohbet modeli. */
+const DEEPSEEK_MODEL = 'deepseek-chat';
 
-const MODEL_LINE_FOR_LOG = `${MODEL_PRIMARY} (yedek: ${MODEL_FALLBACK})`;
+const MODEL_LINE_FOR_LOG = DEEPSEEK_MODEL;
 
 /**
  * Yanıt uzunluğu sınırı. Prompt'taki "kısa tut" talimatı bu değerle aynı
@@ -147,10 +141,14 @@ export class ProviderError extends Error {
 const TIMEOUT_ERROR_NAMES = new Set(['TimeoutError', 'AbortError']);
 
 function isTimeoutError(error: unknown): boolean {
+  if (error instanceof APIConnectionTimeoutError) return true;
   return error instanceof Error && TIMEOUT_ERROR_NAMES.has(error.name);
 }
 
 function errorStatusOf(error: unknown): number | undefined {
+  if (error instanceof APIError && typeof error.status === 'number') {
+    return error.status;
+  }
   if (typeof error !== 'object' || error === null) return undefined;
   if (!('status' in error)) return undefined;
   const status = Number((error as { status: unknown }).status);
@@ -162,18 +160,14 @@ function errorMessageOf(error: unknown): string {
 }
 
 /**
- * Gemini çağrısındaki hatayı sınıflandırır.
- * SDK bir `ApiError` fırlatır ve `status` alanında HTTP kodunu taşır.
- * Teşhis için durum kodu ve sağlayıcının ham mesajı korunur.
+ * DeepSeek (OpenAI SDK) çağrısındaki hatayı sınıflandırır.
  */
-function toProviderError(error: unknown, modelLabel?: string): never {
+function toProviderError(error: unknown): never {
   if (error instanceof ProviderError) throw error;
-
-  const label = modelLabel ?? MODEL_PRIMARY;
 
   if (isTimeoutError(error)) {
     throw new ProviderError(
-      `Gemini çağrısı zaman aşımına düştü (model: ${label}).`,
+      `DeepSeek çağrısı zaman aşımına düştü (model: ${DEEPSEEK_MODEL}).`,
       { providerMessage: errorMessageOf(error) },
     );
   }
@@ -182,7 +176,7 @@ function toProviderError(error: unknown, modelLabel?: string): never {
 
   if (status !== undefined && RETRYABLE_STATUS.has(status)) {
     throw new ProviderError(
-      `Sağlayıcı geçici hata döndürdü (HTTP ${status}, model: ${label}).`,
+      `Sağlayıcı geçici hata döndürdü (HTTP ${status}, model: ${DEEPSEEK_MODEL}).`,
       { statusCode: status, providerMessage: errorMessageOf(error) },
     );
   }
@@ -194,49 +188,30 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function generateContentWithPrimaryThenFallback(
-  ai: GoogleGenAI,
-  args: {
-    contents: ReturnType<typeof buildPrompt>;
-    maxOutputTokens: number;
-    attemptTimeout: number;
-  },
-): Promise<Awaited<ReturnType<typeof ai.models.generateContent>>> {
+async function deepseekGenerateExamJson(
+  userPrompt: string,
+  maxTokens: number,
+  timeoutMs: number,
+): Promise<string> {
   try {
-    return await ai.models.generateContent({
-      model: MODEL_PRIMARY,
-      contents: args.contents,
-      config: {
-        responseMimeType: 'application/json',
+    const completion = await deepseek.chat.completions.create(
+      {
+        model: DEEPSEEK_MODEL,
+        messages: [{ role: 'user', content: userPrompt }],
         temperature: 0.1,
-        maxOutputTokens: args.maxOutputTokens,
-        abortSignal: AbortSignal.timeout(args.attemptTimeout),
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' },
       },
-    });
-  } catch (error) {
-    const status = errorStatusOf(error);
-    if (status === 503 || status === 429) {
-      console.warn(
-        `[generate-exam] Birincil model yoğun/kotada (HTTP ${status}), ` +
-          `${MODEL_FALLBACK_BACKOFF_MS} ms bekleyip yedek model deneniyor: ${MODEL_FALLBACK}`,
-      );
-      await sleep(MODEL_FALLBACK_BACKOFF_MS);
-      try {
-        return await ai.models.generateContent({
-          model: MODEL_FALLBACK,
-          contents: args.contents,
-          config: {
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-            maxOutputTokens: args.maxOutputTokens,
-            abortSignal: AbortSignal.timeout(args.attemptTimeout),
-          },
-        });
-      } catch (fallbackError) {
-        toProviderError(fallbackError, MODEL_FALLBACK);
-      }
+      { timeout: timeoutMs },
+    );
+    const content = completion.choices[0]?.message?.content;
+    if (typeof content !== 'string' || content.trim().length === 0) {
+      throw new ModelOutputError('Model boş yanıt döndürdü.');
     }
-    toProviderError(error, MODEL_PRIMARY);
+    return content;
+  } catch (error) {
+    if (error instanceof ModelOutputError) throw error;
+    return toProviderError(error);
   }
 }
 
@@ -526,10 +501,6 @@ export function extractJsonFromModelText(raw: string): JsonRecord {
   return parsed;
 }
 
-function extractJsonObject(text: string): JsonRecord {
-  return extractJsonFromModelText(text);
-}
-
 function isJsonShapeRetryable(error: unknown): boolean {
   if (error instanceof QuestionCountMismatchError) return false;
   if (!(error instanceof ModelOutputError)) return false;
@@ -750,7 +721,6 @@ function normalizePayload(
  * 60 sn sınırına hiçbir koşulda çarpılmaz.
  */
 async function generateOnce(
-  ai: GoogleGenAI,
   input: GenerateExamRequest,
   timeoutMs: number,
 ): Promise<AssessmentPayload> {
@@ -763,27 +733,25 @@ async function generateOnce(
         ? timeoutMs
         : Math.max(MIN_ATTEMPT_WINDOW_MS, Math.floor(timeoutMs * 0.55));
 
-    let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
-    const contents = buildPrompt(input);
+    const userPrompt = buildPrompt(input);
 
+    let text: string;
     try {
-      response = await generateContentWithPrimaryThenFallback(ai, {
-        contents,
+      text = await deepseekGenerateExamJson(
+        userPrompt,
         maxOutputTokens,
         attemptTimeout,
-      });
+      );
     } catch (error) {
-      // Zaman aşımı ve SDK'nın fırlattığı 403/429/503 gibi hatalar burada sınıflandırılır.
       if (isTimeoutError(error)) {
         console.error(
           `[API] İstek ${CALL_TIMEOUT_MS / 1000} sn zaman aşımına uğradı, retry bütçesi kontrol ediliyor`,
         );
       }
-      toProviderError(error);
+      throw error;
     }
 
-    const text = response.text;
-    if (!text) {
+    if (!text.trim()) {
       const emptyErr = new ModelOutputError('Model boş yanıt döndürdü.');
       if (apiAttempt === 0) {
         lastRecoverableError = emptyErr;
@@ -830,7 +798,6 @@ async function generateOnce(
  * süreyle sınırlanır, böylece platformun 60 sn sınırına hiçbir koşulda çarpılmaz.
  */
 async function generateWithRetry(
-  ai: GoogleGenAI,
   input: GenerateExamRequest,
 ): Promise<AssessmentPayload> {
   const deadline = Date.now() + MAX_RETRY_BUDGET_MS;
@@ -854,14 +821,13 @@ async function generateWithRetry(
     );
 
     try {
-      return await generateOnce(ai, input, timeoutMs);
+      return await generateOnce(input, timeoutMs);
     } catch (error) {
       if (!(error instanceof ProviderError)) throw error;
 
       lastError = error;
 
-      // 403 kalıcıdır. 429/503 için generateOnce içinde yedek modele düşüldükten sonra
-      // hâlâ ProviderError geliyorsa üst katman retry (generateWithRetry) veya son hata.
+      // 403 kalıcıdır; tekrar denemek sonucu değiştirmez.
       if (error.statusCode === 403) {
         console.warn(
           `[generate-exam] Kalıcı hata (HTTP ${error.statusCode}), retry yapılmayacak:`,
@@ -902,17 +868,15 @@ async function generateWithRetry(
 export async function runGenerateExam(
   input: GenerateExamRequest,
 ): Promise<AssessmentPayload> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) {
     throw new ProviderError(
-      'GEMINI_API_KEY ortam değişkeni tanımlı değil. Sunucu yapılandırmasını kontrol edin.',
+      'DEEPSEEK_API_KEY ortam değişkeni tanımlı değil. Sunucu yapılandırmasını kontrol edin.',
     );
   }
 
-  const ai = new GoogleGenAI({ apiKey });
-
   try {
-    return await generateWithRetry(ai, input);
+    return await generateWithRetry(input);
   } catch (error) {
     if (!(error instanceof QuestionCountMismatchError)) {
       throw error;
@@ -922,7 +886,7 @@ export async function runGenerateExam(
       '[generate-exam] Soru sayısı uyuşmadı, 1 kez yeniden denenecek:',
       error.message,
     );
-    return await generateWithRetry(ai, input);
+    return await generateWithRetry(input);
   }
 }
 
