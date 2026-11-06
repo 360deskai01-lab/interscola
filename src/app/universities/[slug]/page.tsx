@@ -14,11 +14,17 @@ import {
   Wallet,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { getStudentLatestScoresAction, type University } from '@/app/universities/actions';
+import {
+  getStudentLatestScoresAction,
+  getUniversityDetailsAction,
+  type University,
+} from '@/app/universities/actions';
+import type { UniversityProgram } from '@/types/university';
 import { fetchTargetUniversityBySlugCached } from '@/lib/universities/cached-university';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { FoundationPathwayBadge } from '@/components/universities/FoundationPathwayBadge';
 import { UniversityDetailStickyCta } from '@/components/universities/UniversityDetailStickyCta';
+import { UniversityProgramsPanel } from '@/components/universities/UniversityProgramsPanel';
 import { UniversityHeroBanner } from '@/components/universities/UniversityVisualMedia';
 import { absoluteUrl } from '@/lib/seo/site-url';
 import {
@@ -124,7 +130,13 @@ export async function generateMetadata({
   };
 }
 
-function UniversityMainColumn({ university }: { university: University }): ReactNode {
+function UniversityMainColumn({
+  university,
+  programs,
+}: {
+  university: University;
+  programs: UniversityProgram[];
+}): ReactNode {
   const ieltsDisplay =
     university.min_ielts_band !== null
       ? university.min_ielts_band.toFixed(1)
@@ -208,6 +220,8 @@ function UniversityMainColumn({ university }: { university: University }): React
         ) : null}
       </section>
 
+      <UniversityProgramsPanel programs={programs} />
+
       {university.scholarship_info?.trim() ? (
         <section aria-labelledby="scholarship-heading">
           <h2
@@ -286,14 +300,17 @@ export default async function UniversityDetailPage({
 
   const { slug } = await params;
 
-  const [university, studentScores] = await Promise.all([
-    fetchTargetUniversityBySlugCached(slug),
+  const [details, studentScores] = await Promise.all([
+    getUniversityDetailsAction(slug),
     getStudentLatestScoresAction(),
   ]);
 
-  if (!university) {
+  if (!details.success || !details.university) {
     notFound();
   }
+
+  const university = details.university;
+  const programs = details.programs ?? [];
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-indigo-950/40 text-slate-100">
@@ -309,7 +326,7 @@ export default async function UniversityDetailPage({
         </Link>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-          <UniversityMainColumn university={university} />
+          <UniversityMainColumn university={university} programs={programs} />
           <UniversityDetailStickyCta
             university={university}
             studentScores={studentScores}

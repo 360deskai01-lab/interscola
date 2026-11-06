@@ -1,4 +1,8 @@
 import type { University } from '@/lib/universities/types';
+import type {
+  UniversityProgram,
+  UniversityProgramDegreeLevel,
+} from '@/types/university';
 import { attachFoundationFlags } from '@/lib/universities/foundation-flags';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
@@ -132,4 +136,98 @@ export async function fetchTargetUniversityBySlug(
     mapTargetUniversityRow(publishedQuery.data as TargetUniversityRow),
   ]);
   return withFlag ?? null;
+}
+
+const PROGRAM_DEGREE_LEVELS = new Set<string>([
+  'bachelor',
+  'master',
+  'doctoral',
+  'other',
+]);
+
+function mapProgramDegree(raw: unknown): UniversityProgramDegreeLevel {
+  if (typeof raw === 'string' && PROGRAM_DEGREE_LEVELS.has(raw)) {
+    return raw as UniversityProgramDegreeLevel;
+  }
+  return 'other';
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function mapUniversityProgramRow(row: Record<string, unknown>): UniversityProgram {
+  return {
+    id: String(row.id ?? ''),
+    university_id: String(row.university_id ?? ''),
+    program_name:
+      typeof row.program_name === 'string' ? row.program_name : 'Program',
+    degree_level: mapProgramDegree(row.degree_level),
+    faculty: typeof row.faculty === 'string' ? row.faculty.trim() || null : null,
+    min_sat_score: toNumberOrNull(row.min_sat_score) as number | null,
+    min_sat_math: toNumberOrNull(row.min_sat_math) as number | null,
+    min_sat_rw: toNumberOrNull(row.min_sat_rw) as number | null,
+    min_ielts_score: toNumberOrNull(row.min_ielts_score),
+    min_ielts_subscore: toNumberOrNull(row.min_ielts_subscore),
+    min_gpa: typeof row.min_gpa === 'string' ? row.min_gpa.trim() || null : null,
+    application_deadline:
+      typeof row.application_deadline === 'string' &&
+      row.application_deadline.trim()
+        ? row.application_deadline.trim().slice(0, 10)
+        : null,
+    english_waiver_policy:
+      typeof row.english_waiver_policy === 'string' &&
+      row.english_waiver_policy.trim()
+        ? row.english_waiver_policy.trim()
+        : null,
+  };
+}
+
+const UNIVERSITY_PROGRAM_SELECT =
+  'id, university_id, program_name, degree_level, faculty, min_sat_score, min_sat_math, min_sat_rw, min_ielts_score, min_ielts_subscore, min_gpa, application_deadline, english_waiver_policy';
+
+/**
+ * Yayınlanmış üniversiteye bağlı program satırları. Tablo yoksa veya RLS engellerse [].
+ */
+export async function fetchUniversityProgramsByUniversityId(
+  universityId: string,
+): Promise<UniversityProgram[]> {
+  const normalized = universityId.trim();
+  if (!normalized) return [];
+
+  const client = getTargetUniversitiesClient();
+  if (!client) return [];
+
+  const { data, error } = await client
+    .from('university_programs')
+    .select(UNIVERSITY_PROGRAM_SELECT)
+    .eq('university_id', normalized)
+    .order('program_name', { ascending: true });
+
+  const code = error?.code;
+  const msg = error?.message?.toLowerCase() ?? '';
+  if (
+    code === '42P01' ||
+    msg.includes('does not exist') ||
+    msg.includes('schema cache')
+  ) {
+    return [];
+  }
+
+  if (error) {
+    console.error(
+      '[UNIVERSITY_PROGRAMS_ERROR]:',
+      formatSupabaseError(error),
+      { universityId: normalized },
+    );
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map(mapUniversityProgramRow);
 }

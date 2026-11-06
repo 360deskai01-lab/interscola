@@ -1,4 +1,5 @@
 import type { TuitionTier } from '@/lib/universities/explorer-config';
+import type { UniversityProgram } from '@/types/university';
 
 export type { TuitionTier } from '@/lib/universities/explorer-config';
 
@@ -31,6 +32,8 @@ export interface University {
   special_programs_badge?: string | null;
   /** Kurumda 1 yıllık Foundation / hazırlık programı var mı (`has_foundation_pathway`). */
   has_foundation_pathway?: boolean;
+  /** `university_programs` — detay sayfasında dolar; liste sorgularında genelde yok. */
+  programs?: UniversityProgram[];
 }
 
 export type UniversityCountryFilter =

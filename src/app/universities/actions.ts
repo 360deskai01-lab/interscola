@@ -3,6 +3,7 @@
 import { getCurrentProfile } from '@/lib/auth';
 import {
   fetchTargetUniversityBySlug,
+  fetchUniversityProgramsByUniversityId,
   TARGET_UNIVERSITY_SELECT,
 } from '@/lib/universities/repository';
 import { ATTEMPTS_TABLE, getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
@@ -19,12 +20,14 @@ import type {
   University,
   UniversityCountryFilter,
 } from '@/lib/universities/types';
+import type { UniversityProgram } from '@/types/university';
 
 export type {
   StudentLatestScores,
   University,
   UniversityCountryFilter,
 } from '@/lib/universities/types';
+export type { UniversityProgram } from '@/types/university';
 export type { UniversityListFilters } from '@/lib/universities/list-query';
 export type {
   TuitionTier,
@@ -93,6 +96,44 @@ export async function getUniversityBySlugAction(slug: string): Promise<{
   } catch (error) {
     console.error(
       '[UNIVERSITY_BY_SLUG_ERROR]:',
+      formatSupabaseError(error),
+      { slug: normalized, select: TARGET_UNIVERSITY_SELECT },
+    );
+    return { success: false, error: 'Üniversite sayfası yüklenemedi.' };
+  }
+}
+
+/**
+ * Üniversite detayı + program satırları (`university_programs`).
+ * Tablo yoksa veya boşsa programlar [] döner.
+ */
+export async function getUniversityDetailsAction(slug: string): Promise<{
+  success: boolean;
+  error?: string;
+  university?: University;
+  programs?: UniversityProgram[];
+}> {
+  const normalized = slug.trim();
+  if (!normalized) {
+    return { success: false, error: 'Geçersiz üniversite adresi.' };
+  }
+
+  try {
+    const university = await fetchTargetUniversityBySlug(normalized);
+    if (!university) {
+      return { success: false, error: 'Üniversite bulunamadı.' };
+    }
+
+    const programs = await fetchUniversityProgramsByUniversityId(university.id);
+
+    return {
+      success: true,
+      university,
+      programs,
+    };
+  } catch (error) {
+    console.error(
+      '[UNIVERSITY_DETAILS_ERROR]:',
       formatSupabaseError(error),
       { slug: normalized, select: TARGET_UNIVERSITY_SELECT },
     );
