@@ -24,6 +24,8 @@ interface AuthPanelProps {
   role?: 'admin' | 'teacher' | 'student' | null;
   /** Profil onay durumu (`approved` ise portal linkleri gösterilir). */
   status?: string | null;
+  /** B2B kurum koordinatörü — header'da kurum portalı linki. */
+  isCoordinatorPortal?: boolean;
   loading: boolean;
   onSignOut: () => void;
 }
@@ -39,6 +41,7 @@ export function AuthPanel({
   user,
   role = null,
   status = null,
+  isCoordinatorPortal = false,
   loading,
   onSignOut,
 }: AuthPanelProps): ReactNode {
@@ -74,6 +77,15 @@ export function AuthPanel({
 
   return (
     <div className="flex items-center gap-2">
+      {isApproved && isCoordinatorPortal ? (
+        <Link
+          href="/coordinator"
+          className="flex items-center gap-1.5 rounded-full border border-indigo-400/45 bg-indigo-500/20 px-3.5 py-1.5 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30 hover:text-white"
+        >
+          🏛️ Kurum Portalı
+        </Link>
+      ) : null}
+
       {role === 'admin' ? (
         <Link
           href="/admin/dashboard"

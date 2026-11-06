@@ -28,6 +28,10 @@ export interface CoordinatorMemberSummary {
   branchName: string | null;
   displayName: string;
   email: string | null;
+  /** `organization_members.created_at` (ISO). */
+  memberCreatedAt: string | null;
+  /** Öğrenci profilindeki hedef sınav etiketleri (ör. SAT, IELTS). */
+  targetExamLabels: string[];
 }
 
 export interface CoordinatorOrganizationSummary {

@@ -1,0 +1,391 @@
+'use client';
+
+import {
+  Building2,
+  Check,
+  ClipboardCopy,
+  GraduationCap,
+  LayoutGrid,
+  MapPin,
+  Users,
+} from 'lucide-react';
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { CoordinatorOrganizationContext } from '@/lib/b2b/coordinator-types';
+
+type TabId = 'teachers' | 'students' | 'branches';
+
+function licenseBadgeLabel(raw: string | null): string {
+  const t = (raw ?? '').toLowerCase().trim();
+  if (!t) return 'Standart';
+  if (t.includes('enterprise')) return 'Enterprise';
+  if (t.includes('pilot')) return 'Pilot';
+  if (t.includes('standard') || t.includes('standart')) return 'Standart';
+  return raw!.replace(/_/g, ' ');
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('tr-TR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function statusPill(ok: boolean): ReactNode {
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+        ok
+          ? 'border-emerald-400/35 bg-emerald-500/15 text-emerald-200'
+          : 'border-amber-400/35 bg-amber-500/10 text-amber-100'
+      }`}
+    >
+      {ok ? 'Aktif' : 'Beklemede'}
+    </span>
+  );
+}
+
+export interface CoordinatorDashboardClientProps {
+  coordinatorName: string;
+  context: CoordinatorOrganizationContext;
+}
+
+export function CoordinatorDashboardClient({
+  coordinatorName,
+  context,
+}: CoordinatorDashboardClientProps): ReactNode {
+  const [tab, setTab] = useState<TabId>('teachers');
+  const [copied, setCopied] = useState(false);
+
+  const org = context.organization;
+  const branchCurrent = useMemo(() => {
+    const list = context.branches;
+    if (list.length === 0) return 'Merkez (şube tanımsız)';
+    if (list.length === 1) return list[0].name;
+    return `${list.length} kampüs`;
+  }, [context.branches]);
+
+  const licenseBadge = licenseBadgeLabel(org.licenseType);
+  const quotaTotal =
+    org.studentQuota != null && org.studentQuota > 0 ? org.studentQuota : null;
+  const used = org.seatsUsed;
+  const fillPercent =
+    quotaTotal != null
+      ? Math.min(100, Math.round((used / quotaTotal) * 100))
+      : org.usagePercent != null
+        ? Math.min(100, Math.round(org.usagePercent))
+        : null;
+
+  const joinCode = org.joinCode?.trim() || '—';
+
+  const copyJoinCode = useCallback(async () => {
+    if (!org.joinCode?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(org.joinCode.trim());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [org.joinCode]);
+
+  return (
+    <main className="relative mx-auto max-w-[1200px] px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.22),transparent_65%)]"
+      />
+
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-xl shadow-indigo-950/40 backdrop-blur-sm sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
+              Kurum portalı
+            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              {org.name}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1">
+                <Building2 className="size-4 text-indigo-300" />
+                {branchCurrent}
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-violet-100">
+                <GraduationCap className="size-4 text-violet-200" />
+                Koordinatör: {coordinatorName}
+              </span>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+              Lisans
+            </span>
+            <span
+              className={`inline-flex rounded-full border px-4 py-1.5 text-sm font-semibold ${
+                licenseBadge === 'Enterprise'
+                  ? 'border-amber-400/40 bg-amber-500/15 text-amber-100'
+                  : licenseBadge === 'Pilot'
+                    ? 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100'
+                    : 'border-slate-400/30 bg-slate-500/15 text-slate-100'
+              }`}
+            >
+              {licenseBadge}
+            </span>
+            {!org.isActive ? (
+              <span className="text-xs text-amber-200/90">
+                Kurum lisansı pasif görünüyor; yönetici ile iletişime geçin.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {/* KPI */}
+      <section className="relative mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Öğrenci lisanskotası
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {used}
+            {quotaTotal != null ? (
+              <span className="text-lg font-normal text-slate-400">
+                {' '}
+                / {quotaTotal}
+              </span>
+            ) : (
+              <span className="text-sm font-normal text-slate-500">
+                {' '}
+                (toplam kotasız)
+              </span>
+            )}
+          </p>
+          {fillPercent != null ? (
+            <>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-fuchsia-500 transition-[width]"
+                  style={{ width: `${fillPercent}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-slate-400">
+                Doluluk ~%{fillPercent}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">Yüzde hesaplanamıyor.</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Aktif öğretmen
+          </p>
+          <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold text-white">
+            <Users className="size-6 text-indigo-300" />
+            {context.teachers.length}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Onaylı kurum üyeliği (`org_role: teacher`)
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            Kayıtlı öğrenci
+          </p>
+          <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold text-white">
+            <GraduationCap className="size-6 text-sky-300" />
+            {context.students.length}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Katılım kodu ile bağlanan öğrenci koltukları
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-indigo-400/20 bg-indigo-950/40 p-5 backdrop-blur-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-indigo-200/80">
+            Okul katılım kodu
+          </p>
+          <p className="mt-2 break-all font-mono text-lg font-semibold tracking-wide text-white sm:text-xl">
+            {joinCode}
+          </p>
+          <button
+            type="button"
+            onClick={() => void copyJoinCode()}
+            disabled={!org.joinCode?.trim()}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-3 py-2 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {copied ? (
+              <Check className="size-4 text-emerald-300" />
+            ) : (
+              <ClipboardCopy className="size-4" />
+            )}
+            {copied ? 'Kopyalandı' : 'Kopyala'}
+          </button>
+          <p className="mt-3 text-xs leading-relaxed text-slate-400">
+            Öğrencileriniz bu kodu{' '}
+            <span className="text-slate-200">Öğrenci paneli → Kurum</span>{' '}
+            adımında girerek kurumunuza bağlanır. Kodu yalnızca kurum içi
+            paylaşın.
+          </p>
+        </div>
+      </section>
+
+      {/* Tabs */}
+      <section className="relative mt-8 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-sm">
+        <div className="flex flex-wrap gap-2 border-b border-white/10 p-4 sm:p-5">
+          {(
+            [
+              ['teachers', 'Öğretmen Kadrosu', Users],
+              ['students', 'Kayıtlı Öğrenciler', GraduationCap],
+              ['branches', 'Şubeler / Kampüsler', LayoutGrid],
+            ] as const
+          ).map(([id, label, Icon]) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
+                  active
+                    ? 'bg-indigo-500/25 text-indigo-100 ring-1 ring-indigo-400/40'
+                    : 'text-slate-400 hover:bg-white/[0.06] hover:text-slate-100'
+                }`}
+              >
+                <Icon className="size-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="overflow-x-auto p-4 sm:p-5">
+          {tab === 'teachers' ? (
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
+                  <th className="pb-3 pr-4 font-medium">E-posta</th>
+                  <th className="pb-3 pr-4 font-medium">Şube</th>
+                  <th className="pb-3 font-medium">Durum</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {context.teachers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-slate-500">
+                      Henüz kayıtlı öğretmen yok.
+                    </td>
+                  </tr>
+                ) : (
+                  context.teachers.map((t) => (
+                    <tr key={t.id} className="text-slate-200">
+                      <td className="py-3 pr-4 font-medium">{t.displayName}</td>
+                      <td className="py-3 pr-4 text-slate-400">
+                        {t.email ?? '—'}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-300">
+                        {t.branchName ?? '—'}
+                      </td>
+                      <td className="py-3">{statusPill(true)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : null}
+
+          {tab === 'students' ? (
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
+                  <th className="pb-3 pr-4 font-medium">Hedef sınavlar</th>
+                  <th className="pb-3 font-medium">Kayıt tarihi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {context.students.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-slate-500">
+                      Henüz öğrenci bağlanmamış.
+                    </td>
+                  </tr>
+                ) : (
+                  context.students.map((s) => (
+                    <tr key={s.id} className="text-slate-200">
+                      <td className="py-3 pr-4 font-medium">{s.displayName}</td>
+                      <td className="py-3 pr-4">
+                        {s.targetExamLabels.length > 0 ? (
+                          <span className="flex flex-wrap gap-1">
+                            {s.targetExamLabels.map((tag) => (
+                              <span
+                                key={`${s.id}-${tag}`}
+                                className="rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-100"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-slate-400">
+                        {formatDate(s.memberCreatedAt)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : null}
+
+          {tab === 'branches' ? (
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                  <th className="pb-3 pr-4 font-medium">Kampüs</th>
+                  <th className="pb-3 font-medium">Şehir</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {context.branches.length === 0 ? (
+                  <tr>
+                    <td colSpan={2} className="py-8 text-center text-slate-500">
+                      Tanımlı şube yok; tüm öğretmen/öğrenciler merkeze bağlı
+                      olabilir.
+                    </td>
+                  </tr>
+                ) : (
+                  context.branches.map((b) => (
+                    <tr key={b.id} className="text-slate-200">
+                      <td className="py-3 pr-4 font-medium">{b.name}</td>
+                      <td className="py-3">
+                        <span className="inline-flex items-center gap-1.5 text-slate-400">
+                          <MapPin className="size-3.5 text-slate-500" />
+                          {b.city?.trim() || '—'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : null}
+        </div>
+      </section>
+    </main>
+  );
+}

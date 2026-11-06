@@ -103,6 +103,7 @@ interface SessionResult {
   user: SessionUser | null;
   role: UserRole;
   status: string | null;
+  isCoordinatorPortal: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +150,8 @@ export default function HomePageClient({
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [sessionRole, setSessionRole] = useState<UserRole>(null);
   const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [sessionCoordinatorPortal, setSessionCoordinatorPortal] =
+    useState(false);
   const [sessionLoading, setSessionLoading] = useState(true);
 
   const deadlineRef = useRef<number | null>(null);
@@ -178,7 +181,12 @@ export default function HomePageClient({
       fetch('/api/auth/session', { cache: 'no-store' })
         .then(async (response) => {
           const payload: unknown = await response.json().catch(() => null);
-          const empty: SessionResult = { user: null, role: null, status: null };
+          const empty: SessionResult = {
+            user: null,
+            role: null,
+            status: null,
+            isCoordinatorPortal: false,
+          };
           if (!response.ok || !isRecord(payload)) return empty;
 
           const rawRole = payload.role;
@@ -194,8 +202,11 @@ export default function HomePageClient({
             typeof rawStatus === 'string' && rawStatus ? rawStatus : null;
 
           const user = payload.user;
+          const isCoordinatorPortal =
+            payload.isCoordinatorPortal === true;
+
           if (!isRecord(user) || typeof user.id !== 'string') {
-            return { user: null, role, status };
+            return { user: null, role, status, isCoordinatorPortal };
           }
 
           return {
@@ -205,13 +216,22 @@ export default function HomePageClient({
             },
             role,
             status,
+            isCoordinatorPortal,
           };
         })
-        .catch((): SessionResult => ({ user: null, role: null, status: null }))
+        .catch(
+          (): SessionResult => ({
+            user: null,
+            role: null,
+            status: null,
+            isCoordinatorPortal: false,
+          }),
+        )
         .then((result) => {
           setSessionUser(result.user);
           setSessionRole(result.role);
           setSessionStatus(result.status);
+          setSessionCoordinatorPortal(result.isCoordinatorPortal);
           setSessionLoading(false);
         }),
     [],
@@ -513,8 +533,9 @@ export default function HomePageClient({
       user: sessionUser,
       role,
       status,
+      isCoordinatorPortal: sessionCoordinatorPortal,
     };
-  }, [sessionRole, sessionStatus, sessionUser]);
+  }, [sessionCoordinatorPortal, sessionRole, sessionStatus, sessionUser]);
 
   const showGuestHome = !sessionLoading && sessionUser === null;
   const showMemberHome = !sessionLoading && sessionUser !== null;

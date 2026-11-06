@@ -6,19 +6,10 @@ import {
   type CoordinatorOrganizationContext,
   isCoordinatorEligibleOrgRole,
 } from '@/lib/b2b/coordinator-types';
-import { getStudentProfileDbClient } from '@/lib/student-profile/load-context';
-
-export type {
-  CoordinatorBranchSummary,
-  CoordinatorMemberSummary,
-  CoordinatorOrganizationContext,
-  CoordinatorOrganizationSummary,
-} from '@/lib/b2b/coordinator-types';
-
-export {
-  COORDINATOR_ELIGIBLE_ORG_ROLES,
-  isCoordinatorEligibleOrgRole,
-} from '@/lib/b2b/coordinator-types';
+import {
+  getStudentProfileDbClient,
+  parseTargetScores,
+} from '@/lib/student-profile/load-context';
 
 export async function getCoordinatorOrganizationContextAction(): Promise<{
   success: boolean;
@@ -88,7 +79,7 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
         .order('name', { ascending: true }),
       client
         .from('organization_members')
-        .select('id, user_id, org_role, branch_id, is_active')
+        .select('id, user_id, org_role, branch_id, is_active, created_at')
         .eq('organization_id', organizationId)
         .eq('is_active', true),
     ]);
@@ -120,6 +111,7 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
       user_id: string;
       org_role: string | null;
       branch_id: string | null;
+      created_at: string | null;
     }[];
 
     const seatsUsed = memberRows.filter((m) => m.org_role === 'student').length;
@@ -128,33 +120,64 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
     const userIds = [...new Set(memberRows.map((m) => m.user_id))];
     const profileById = new Map<
       string,
-      { full_name: string | null; email: string | null }
+      {
+        full_name: string | null;
+        email: string | null;
+        target_scores: unknown;
+      }
     >();
 
     if (userIds.length > 0) {
       const { data: profiles } = await client
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, target_scores')
         .in('id', userIds);
       for (const p of profiles ?? []) {
         const row = p as {
           id: string;
           full_name: string | null;
           email: string | null;
+          target_scores?: unknown;
         };
         profileById.set(row.id, {
           full_name: row.full_name,
           email: row.email,
+          target_scores: row.target_scores,
         });
       }
     }
 
+    function targetExamLabelsFromProfile(
+      orgRole: string | null,
+      targetScores: unknown,
+    ): string[] {
+      if (orgRole !== 'student') return [];
+      const scores = parseTargetScores(targetScores);
+      const order = ['SAT', 'IELTS', 'CAIE'] as const;
+      const seen = new Set<string>();
+      const labels: string[] = [];
+      for (const key of order) {
+        if (scores[key] !== undefined) {
+          seen.add(key);
+          labels.push(key);
+        }
+      }
+      for (const key of Object.keys(scores)) {
+        if (!seen.has(key)) {
+          seen.add(key);
+          labels.push(key);
+        }
+      }
+      return labels;
+    }
+
     function mapMember(row: (typeof memberRows)[number]) {
       const profile = profileById.get(row.user_id);
+      const orgRole = row.org_role ?? 'member';
       return {
         id: row.id,
         userId: row.user_id,
-        orgRole: row.org_role ?? 'member',
+        orgRole,
         branchId: row.branch_id,
         branchName: row.branch_id
           ? (branchNameById.get(row.branch_id) ?? null)
@@ -164,6 +187,11 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
           profile?.email?.trim() ||
           row.user_id.slice(0, 8),
         email: profile?.email ?? null,
+        memberCreatedAt: row.created_at,
+        targetExamLabels: targetExamLabelsFromProfile(
+          orgRole,
+          profile?.target_scores,
+        ),
       };
     }
 

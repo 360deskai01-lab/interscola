@@ -89,6 +89,15 @@ export function NavbarAuthArea({
         </span>
       ) : null}
 
+      {!isPending && auth.isCoordinatorPortal ? (
+        <Link
+          href="/coordinator"
+          className={`inline-flex items-center gap-1.5 rounded-full border border-indigo-400/45 bg-indigo-500/20 px-3.5 py-2 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30 ${btnClass}`}
+        >
+          🏛️ Kurum Portalı
+        </Link>
+      ) : null}
+
       {portal ? (
         <Link
           href={portal.href}

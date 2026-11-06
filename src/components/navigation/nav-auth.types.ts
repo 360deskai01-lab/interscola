@@ -11,10 +11,13 @@ export interface NavbarAuthSnapshot {
   user: NavbarUser | null;
   role: NavbarRole | null;
   status: NavbarStatus | null;
+  /** B2B koordinatör / kurum yöneticisi (`organization_members`). */
+  isCoordinatorPortal?: boolean;
 }
 
 export const EMPTY_NAVBAR_AUTH: NavbarAuthSnapshot = {
   user: null,
   role: null,
   status: null,
+  isCoordinatorPortal: false,
 };
