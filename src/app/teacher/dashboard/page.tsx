@@ -21,6 +21,11 @@ import {
   getTeacherAssignmentsProgressAction,
   getTeacherLibraryAction,
 } from '../library-actions';
+import { getStudentFacultyFormAction } from '../faculty-actions';
+import {
+  generateStudentWeeklyDigestFormAction,
+  publishStudentDigestFormAction,
+} from '../digest-actions';
 import {
   getConversationFormAction,
   getUnreadCountsByAssignmentAction,
@@ -86,6 +91,9 @@ export default async function TeacherDashboardPage({
   const assignmentProgress = progressResult.success
     ? (progressResult.data ?? [])
     : [];
+  const assignmentVolume = assignmentProgress.filter(
+    (row) => row.libraryId !== null,
+  ).length;
   const orgContext = orgContextResult.success
     ? orgContextResult.context
     : null;
@@ -169,12 +177,17 @@ export default async function TeacherDashboardPage({
           onMarkMessagesRead={markMessagesAsReadFormAction}
           unreadByAssignment={unreadByAssignment}
           unreadMessageTotal={unreadMessageTotal}
+          onLoadStudentFaculty={getStudentFacultyFormAction}
+          onGenerateWeeklyDigest={generateStudentWeeklyDigestFormAction}
+          onPublishWeeklyDigest={publishStudentDigestFormAction}
           onLoadStudentAnalytics={getStudentAnalyticsForTeacherFormAction}
           onLoadStudentCareerInsight={getStudentCareerInsightForTeacherFormAction}
           stats={{
             studentCount: students.length,
             pendingInvites: invites.length,
             totalAttempts,
+            libraryMaterialCount: libraryItems.length,
+            assignmentVolume,
           }}
           panelDataError={panelDataError}
         />

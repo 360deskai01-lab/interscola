@@ -18,6 +18,8 @@ import type { StudentAnalyticsData } from '@/lib/student-analytics';
 import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 import { parseTeacherDashboardTab } from '@/lib/teacher-dashboard/dashboard-tabs';
 import { TeacherPanel } from '@/components/teacher/TeacherPanel';
+import type { FacultyColleague } from '@/app/teacher/faculty-actions';
+import type { WeeklyDigestRow } from '@/app/teacher/digest-actions';
 
 export interface TeacherDashboardShellProps {
   profileEmail: string;
@@ -67,6 +69,7 @@ export interface TeacherDashboardShellProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -76,13 +79,29 @@ export interface TeacherDashboardShellProps {
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkMessagesRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   unreadByAssignment: Record<string, number>;
   unreadMessageTotal: number;
+  onLoadStudentFaculty: (studentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: FacultyColleague[];
+  }>;
+  onGenerateWeeklyDigest: (studentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: WeeklyDigestRow;
+  }>;
+  onPublishWeeklyDigest: (
+    digestId: string,
+    body?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>;
   onLoadStudentAnalytics: (studentId: string) => Promise<{
     success: boolean;
     error?: string;
@@ -100,6 +119,8 @@ export interface TeacherDashboardShellProps {
     studentCount: number;
     pendingInvites: number;
     totalAttempts: number;
+    libraryMaterialCount: number;
+    assignmentVolume: number;
   };
   panelDataError: string | null;
 }

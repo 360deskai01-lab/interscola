@@ -5,3 +5,13 @@ export const UNREAD_GENERAL_AGGREGATE_KEY = 'general';
 export function unreadGeneralScopeKey(partnerId: string): string {
   return `${UNREAD_GENERAL_AGGREGATE_KEY}:${partnerId}`;
 }
+
+/**
+ * Ortak eğitmen (faculty) thread rozeti: öğrenci bağlamı + meslektaş kimliği.
+ */
+export function unreadFacultyScopeKey(
+  colleagueId: string,
+  studentContextId: string,
+): string {
+  return `faculty:${colleagueId}:${studentContextId}`;
+}

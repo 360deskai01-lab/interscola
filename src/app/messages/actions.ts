@@ -6,6 +6,7 @@ import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import {
   UNREAD_GENERAL_AGGREGATE_KEY,
+  unreadFacultyScopeKey,
   unreadGeneralScopeKey,
 } from '@/lib/message-unread-scopes';
 
@@ -36,6 +37,7 @@ type MessageRow = {
   sender_id: string;
   receiver_id: string;
   assignment_id: string | null;
+  student_context_id?: string | null;
   content: string;
   is_read: boolean;
   created_at: string;
@@ -93,6 +95,35 @@ async function resolveTeacherStudentPair(
   return { teacherId, studentId };
 }
 
+/**
+ * İki onaylı öğretmenin, ortak bir öğrenci bağlamında mesajlaşmasına izin verir.
+ */
+async function verifyFacultyColleaguePair(
+  client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
+  teacherAId: string,
+  teacherBId: string,
+  studentContextId: string,
+): Promise<boolean> {
+  const [{ data: a }, { data: b }] = await Promise.all([
+    client
+      .from('student_teachers')
+      .select('id')
+      .eq('teacher_id', teacherAId)
+      .eq('student_id', studentContextId)
+      .eq('status', 'active')
+      .maybeSingle(),
+    client
+      .from('student_teachers')
+      .select('id')
+      .eq('teacher_id', teacherBId)
+      .eq('student_id', studentContextId)
+      .eq('status', 'active')
+      .maybeSingle(),
+  ]);
+
+  return Boolean(a && b);
+}
+
 async function verifyAssignmentScope(
   client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
   assignmentId: string,
@@ -135,6 +166,7 @@ export async function sendMessageAction(
   receiverId: string,
   content: string,
   assignmentId?: string,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult> {
   try {
     const current = await getCurrentProfile();
@@ -160,9 +192,103 @@ export async function sendMessageAction(
       }
     }
 
+    const scopedStudentContext =
+      studentContextId !== undefined &&
+      studentContextId !== null &&
+      String(studentContextId).trim() !== ''
+        ? String(studentContextId).trim()
+        : null;
+
+    if (scopedStudentContext && !UUID_PATTERN.test(scopedStudentContext)) {
+      return { success: false, error: 'Geçersiz öğrenci bağlamı.' };
+    }
+
     const client = await getProfilesClient();
     if (!client) {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const isFacultyThread =
+      scopedStudentContext !== null &&
+      (current.profile.role === 'teacher' || current.profile.role === 'admin');
+
+    if (isFacultyThread) {
+      if (current.profile.role === 'student') {
+        return {
+          success: false,
+          error: 'Öğrenci bağlamı yalnızca öğretmenler arası konuşmalarda kullanılır.',
+        };
+      }
+
+      const { data: receiverProfile, error: recvErr } = await client
+        .from('profiles')
+        .select('role')
+        .eq('id', receiverId)
+        .maybeSingle();
+
+      if (recvErr || !receiverProfile) {
+        return { success: false, error: 'Alıcı profili okunamadı.' };
+      }
+
+      const recvRole = (receiverProfile as { role: string }).role;
+      if (recvRole !== 'teacher' && recvRole !== 'admin') {
+        return {
+          success: false,
+          error: 'Öğrenci bağlamı yalnızca başka bir eğitmenle kullanılabilir.',
+        };
+      }
+
+      const okColleagues = await verifyFacultyColleaguePair(
+        client,
+        current.user.id,
+        receiverId,
+        scopedStudentContext,
+      );
+
+      if (!okColleagues) {
+        return {
+          success: false,
+          error: 'Bu öğrenci için ortak eğitmen bağlantısı doğrulanamadı.',
+        };
+      }
+
+      const insertPayload: Record<string, unknown> = {
+        sender_id: current.user.id,
+        receiver_id: receiverId,
+        assignment_id: null,
+        student_context_id: scopedStudentContext,
+        content: trimmed,
+        is_read: false,
+      };
+
+      let { error } = await client.from('messages').insert(insertPayload);
+
+      if (error?.code === '42703') {
+        const { error: err2 } = await client.from('messages').insert({
+          sender_id: current.user.id,
+          receiver_id: receiverId,
+          assignment_id: null,
+          content: trimmed,
+          is_read: false,
+        });
+        error = err2;
+      }
+
+      if (error) {
+        console.error('[messages] Mesaj kaydedilemedi:', error.message);
+        return {
+          success: false,
+          error:
+            error.code === '42703'
+              ? 'Sunucuda student_context_id sütunu yok; migration uygulanmalı.'
+              : 'Mesaj gönderilemedi.',
+        };
+      }
+
+      revalidatePath('/student/dashboard');
+      revalidatePath('/teacher/dashboard');
+
+      return { success: true };
     }
 
     const pair = await resolveTeacherStudentPair(
@@ -222,6 +348,7 @@ export async function sendMessageAction(
 export async function getConversationAction(
   partnerId: string,
   assignmentId?: string,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult<ConversationMessage[]>> {
   try {
     const current = await getCurrentProfile();
@@ -236,6 +363,75 @@ export async function getConversationAction(
     const client = await getProfilesClient();
     if (!client) {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const scopedStudentContext =
+      studentContextId !== undefined &&
+      studentContextId !== null &&
+      String(studentContextId).trim() !== ''
+        ? String(studentContextId).trim()
+        : null;
+
+    if (scopedStudentContext && !UUID_PATTERN.test(scopedStudentContext)) {
+      return { success: false, error: 'Geçersiz öğrenci bağlamı.' };
+    }
+
+    const me = current.user.id;
+
+    if (scopedStudentContext) {
+      if (current.profile.role === 'student') {
+        return {
+          success: false,
+          error: 'Öğrenci bağlamı yalnızca öğretmenler için geçerlidir.',
+        };
+      }
+
+      const okPair = await verifyFacultyColleaguePair(
+        client,
+        me,
+        partnerId,
+        scopedStudentContext,
+      );
+
+      if (!okPair) {
+        return {
+          success: false,
+          error: 'Bu ortak eğitmen konuşmasına erişim yok.',
+        };
+      }
+
+      let query = client
+        .from('messages')
+        .select(
+          'id, sender_id, receiver_id, assignment_id, student_context_id, content, is_read, created_at',
+        )
+        .or(
+          `and(sender_id.eq.${me},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${me})`,
+        )
+        .eq('student_context_id', scopedStudentContext)
+        .is('assignment_id', null)
+        .order('created_at', { ascending: true });
+
+      const { data, error } = await query;
+
+      if (error?.code === '42703') {
+        return {
+          success: false,
+          error:
+            'Sunucuda student_context_id sütunu yok; migration uygulanmalı.',
+        };
+      }
+
+      if (error) {
+        console.error('[messages] Konuşma okunamadı:', error.message);
+        return { success: false, error: 'Mesajlar yüklenemedi.' };
+      }
+
+      const messages = ((data ?? []) as MessageRow[]).map((row) =>
+        mapMessageRow(row, me),
+      );
+
+      return { success: true, data: messages };
     }
 
     const pair = await resolveTeacherStudentPair(
@@ -267,11 +463,10 @@ export async function getConversationAction(
       }
     }
 
-    const me = current.user.id;
     let query = client
       .from('messages')
       .select(
-        'id, sender_id, receiver_id, assignment_id, content, is_read, created_at',
+        'id, sender_id, receiver_id, assignment_id, student_context_id, content, is_read, created_at',
       )
       .or(
         `and(sender_id.eq.${me},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${me})`,
@@ -281,10 +476,30 @@ export async function getConversationAction(
     if (scopedAssignmentId) {
       query = query.eq('assignment_id', scopedAssignmentId);
     } else {
-      query = query.is('assignment_id', null);
+      query = query.is('assignment_id', null).is('student_context_id', null);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    if (error?.code === '42703') {
+      let fbQuery = client
+        .from('messages')
+        .select(
+          'id, sender_id, receiver_id, assignment_id, content, is_read, created_at',
+        )
+        .or(
+          `and(sender_id.eq.${me},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${me})`,
+        )
+        .order('created_at', { ascending: true });
+
+      fbQuery = scopedAssignmentId
+        ? fbQuery.eq('assignment_id', scopedAssignmentId)
+        : fbQuery.is('assignment_id', null);
+
+      const retry = await fbQuery;
+      data = retry.data as typeof data;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[messages] Konuşma okunamadı:', error.message);
@@ -311,6 +526,7 @@ export async function getConversationAction(
 export async function markMessagesAsReadAction(
   senderId: string,
   assignmentId?: string | null,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult> {
   try {
     const current = await getCurrentProfile();
@@ -333,9 +549,81 @@ export async function markMessagesAsReadAction(
       return { success: false, error: 'Geçersiz ödev referansı.' };
     }
 
+    const scopedStudentContext =
+      studentContextId !== undefined &&
+      studentContextId !== null &&
+      String(studentContextId).trim() !== ''
+        ? String(studentContextId).trim()
+        : null;
+
+    if (scopedStudentContext && !UUID_PATTERN.test(scopedStudentContext)) {
+      return { success: false, error: 'Geçersiz öğrenci bağlamı.' };
+    }
+
     const client = await getProfilesClient();
     if (!client) {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    if (scopedStudentContext) {
+      if (current.profile.role === 'student') {
+        return {
+          success: false,
+          error: 'Öğrenci bağlamı yalnızca öğretmenler için geçerlidir.',
+        };
+      }
+
+      const ok = await verifyFacultyColleaguePair(
+        client,
+        current.user.id,
+        senderId,
+        scopedStudentContext,
+      );
+
+      if (!ok) {
+        return {
+          success: false,
+          error: 'Bu mesajları okundu işaretleme yetkin yok.',
+        };
+      }
+
+      let updateQuery = client
+        .from('messages')
+        .update({ is_read: true })
+        .eq('receiver_id', current.user.id)
+        .eq('sender_id', senderId)
+        .eq('is_read', false)
+        .eq('student_context_id', scopedStudentContext)
+        .is('assignment_id', null);
+
+      let { error } = await updateQuery;
+
+      if (error?.code === '42703') {
+        const { error: err2 } = await client
+          .from('messages')
+          .update({ is_read: true })
+          .eq('receiver_id', current.user.id)
+          .eq('sender_id', senderId)
+          .eq('is_read', false)
+          .is('assignment_id', null);
+        error = err2;
+      }
+
+      if (error) {
+        console.error('[messages] Okundu güncellenemedi:', error.message);
+        return {
+          success: false,
+          error:
+            error.code === '42703'
+              ? 'Sunucuda student_context_id sütunu yok; migration uygulanmalı.'
+              : 'Okundu bilgisi güncellenemedi.',
+        };
+      }
+
+      revalidatePath('/student/dashboard');
+      revalidatePath('/teacher/dashboard');
+
+      return { success: true };
     }
 
     const pair = await resolveTeacherStudentPair(
@@ -370,10 +658,28 @@ export async function markMessagesAsReadAction(
     if (scopedAssignmentId) {
       updateQuery = updateQuery.eq('assignment_id', scopedAssignmentId);
     } else {
-      updateQuery = updateQuery.is('assignment_id', null);
+      updateQuery = updateQuery
+        .is('assignment_id', null)
+        .is('student_context_id', null);
     }
 
-    const { error } = await updateQuery;
+    let { error } = await updateQuery;
+
+    if (error?.code === '42703') {
+      let fbQuery = client
+        .from('messages')
+        .update({ is_read: true })
+        .eq('receiver_id', current.user.id)
+        .eq('sender_id', senderId)
+        .eq('is_read', false);
+
+      fbQuery = scopedAssignmentId
+        ? fbQuery.eq('assignment_id', scopedAssignmentId)
+        : fbQuery.is('assignment_id', null);
+
+      const retry = await fbQuery;
+      error = retry.error;
+    }
 
     if (error) {
       console.error('[messages] Okundu güncellenemedi:', error.message);
@@ -474,11 +780,21 @@ export async function getUnreadCountsByAssignmentAction(): Promise<{
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
-    const { data, error } = await client
+    let { data, error } = await client
       .from('messages')
-      .select('sender_id, assignment_id')
+      .select('sender_id, assignment_id, student_context_id')
       .eq('receiver_id', current.user.id)
       .eq('is_read', false);
+
+    if (error?.code === '42703') {
+      const fb = await client
+        .from('messages')
+        .select('sender_id, assignment_id')
+        .eq('receiver_id', current.user.id)
+        .eq('is_read', false);
+      data = fb.data as typeof data;
+      error = fb.error;
+    }
 
     if (error) {
       console.error('[messages] Ödev bazlı okunmamış sayım hatası:', error.message);
@@ -492,11 +808,17 @@ export async function getUnreadCountsByAssignmentAction(): Promise<{
       const senderId = (row as { sender_id: string }).sender_id;
       const assignmentId = (row as { assignment_id: string | null })
         .assignment_id;
+      const studentCtx = (row as { student_context_id?: string | null })
+        .student_context_id;
 
       if (typeof senderId !== 'string') continue;
 
       if (assignmentId && UUID_PATTERN.test(assignmentId)) {
         counts[assignmentId] = (counts[assignmentId] ?? 0) + 1;
+      } else if (studentCtx && UUID_PATTERN.test(studentCtx)) {
+        generalTotal += 1;
+        const scopeKey = unreadFacultyScopeKey(senderId, studentCtx);
+        counts[scopeKey] = (counts[scopeKey] ?? 0) + 1;
       } else {
         generalTotal += 1;
         const scopeKey = unreadGeneralScopeKey(senderId);
@@ -522,20 +844,23 @@ export async function sendMessageFormAction(
   receiverId: string,
   content: string,
   assignmentId?: string,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult> {
-  return sendMessageAction(receiverId, content, assignmentId);
+  return sendMessageAction(receiverId, content, assignmentId, studentContextId);
 }
 
 export async function getConversationFormAction(
   partnerId: string,
   assignmentId?: string,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult<ConversationMessage[]>> {
-  return getConversationAction(partnerId, assignmentId);
+  return getConversationAction(partnerId, assignmentId, studentContextId);
 }
 
 export async function markMessagesAsReadFormAction(
   senderId: string,
   assignmentId?: string,
+  studentContextId?: string | null,
 ): Promise<MessageActionResult> {
-  return markMessagesAsReadAction(senderId, assignmentId);
+  return markMessagesAsReadAction(senderId, assignmentId, studentContextId);
 }

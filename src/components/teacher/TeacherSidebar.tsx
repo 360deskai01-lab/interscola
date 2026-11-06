@@ -79,6 +79,18 @@ export function TeacherSidebar({
           })}
         </nav>
 
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <Link
+            href="/teacher/profile"
+            className="flex min-w-[200px] items-center gap-2.5 rounded-xl border border-amber-400/35 bg-amber-500/10 px-3 py-2.5 text-left text-sm font-medium text-amber-100 transition hover:border-amber-400/50 hover:bg-amber-500/15 lg:min-w-0 lg:w-full"
+          >
+            <span className="text-base leading-none" aria-hidden>
+              🎓
+            </span>
+            <span className="leading-snug">Eğitmen Profilim</span>
+          </Link>
+        </div>
+
         <div className="mt-auto border-t border-white/10 pt-4">
           <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
             <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 text-slate-950 shadow-md">

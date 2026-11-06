@@ -23,6 +23,7 @@ interface TeacherAssignmentsProgressSectionProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -32,11 +33,15 @@ interface TeacherAssignmentsProgressSectionProps {
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkMessagesRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  onOpenFacultyBoard?: (studentId: string, studentName: string) => void;
+  onOpenWeeklyDigest?: (studentId: string, studentName: string) => void;
 }
 
 type StatusBucketFilter = 'all' | 'pending' | 'overdue' | 'completed';
@@ -134,6 +139,8 @@ export function TeacherAssignmentsProgressSection({
   onLoadConversation,
   onSendMessage,
   onMarkMessagesRead,
+  onOpenFacultyBoard,
+  onOpenWeeklyDigest,
 }: TeacherAssignmentsProgressSectionProps): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -260,6 +267,41 @@ export function TeacherAssignmentsProgressSection({
                 </button>
               ))}
             </div>
+            {studentFilter &&
+            (onOpenFacultyBoard || onOpenWeeklyDigest) ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {onOpenFacultyBoard ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name =
+                        studentOptions.find(([id]) => id === studentFilter)?.[1] ??
+                        'Öğrenci';
+                      onOpenFacultyBoard(studentFilter, name);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-fuchsia-400/35 bg-fuchsia-500/12 px-2.5 py-1 text-[11px] font-medium text-fuchsia-100 transition hover:bg-fuchsia-500/22"
+                  >
+                    <span aria-hidden>🎓</span>
+                    Ortak Eğitmenler
+                  </button>
+                ) : null}
+                {onOpenWeeklyDigest ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const name =
+                        studentOptions.find(([id]) => id === studentFilter)?.[1] ??
+                        'Öğrenci';
+                      onOpenWeeklyDigest(studentFilter, name);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-500/22"
+                  >
+                    <span aria-hidden>📝</span>
+                    Haftalık Değerlendirme
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

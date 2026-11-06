@@ -16,6 +16,8 @@ export interface MessageThreadTarget {
   partnerId: string;
   partnerLabel: string;
   assignmentId?: string;
+  /** Öğretmen ↔ öğretmen faculty thread'i için ortak öğrenci kimliği. */
+  studentContextId?: string;
   contextLabel?: string;
 }
 
@@ -25,15 +27,18 @@ interface MessageConversationModalProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string; data?: ConversationMessage[] }>;
   onSendMessage: (
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -50,7 +55,7 @@ function formatMessageTime(iso: string): string {
 
 function threadKey(target: MessageThreadTarget | null): string | null {
   if (!target) return null;
-  return `${target.partnerId}::${target.assignmentId ?? ''}`;
+  return `${target.partnerId}::${target.assignmentId ?? ''}::${target.studentContextId ?? ''}`;
 }
 
 export function MessageConversationModal({
@@ -87,6 +92,7 @@ export function MessageConversationModal({
     const result = await onLoadRef.current(
       thread.partnerId,
       thread.assignmentId,
+      thread.studentContextId,
     );
 
     setLoading(false);
@@ -97,7 +103,11 @@ export function MessageConversationModal({
     }
 
     setMessages(result.data ?? []);
-    void onMarkReadRef.current(thread.partnerId, thread.assignmentId);
+    void onMarkReadRef.current(
+      thread.partnerId,
+      thread.assignmentId,
+      thread.studentContextId,
+    );
   }, []);
 
   useEffect(() => {
@@ -143,6 +153,7 @@ export function MessageConversationModal({
         target.partnerId,
         text,
         target.assignmentId,
+        target.studentContextId,
       );
 
       if (!result.success) {
@@ -154,6 +165,7 @@ export function MessageConversationModal({
       const reload = await onLoadRef.current(
         target.partnerId,
         target.assignmentId,
+        target.studentContextId,
       );
       if (reload.success) {
         setMessages(reload.data ?? []);

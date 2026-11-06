@@ -18,6 +18,7 @@ interface TeacherMessagesHubSectionProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -27,10 +28,12 @@ interface TeacherMessagesHubSectionProps {
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkMessagesRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 

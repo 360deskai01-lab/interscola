@@ -5,6 +5,7 @@ import { useState, useTransition, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
+  BookOpen,
   Check,
   ClipboardList,
   Clock,
@@ -29,17 +30,24 @@ import type {
   LibraryItem,
   TeacherAssignmentProgressRow,
 } from '@/app/teacher/library-actions';
+import type { FacultyColleague } from '@/app/teacher/faculty-actions';
+import type { WeeklyDigestRow } from '@/app/teacher/digest-actions';
 import {
   MessageConversationModal,
   type MessageThreadTarget,
 } from '@/components/messages/MessageConversationModal';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
-import { unreadGeneralScopeKey } from '@/lib/message-unread-scopes';
+import {
+  unreadFacultyScopeKey,
+  unreadGeneralScopeKey,
+} from '@/lib/message-unread-scopes';
 import type { StudentAnalyticsData } from '@/lib/student-analytics';
 import { TeacherAssignmentsProgressSection } from '@/components/teacher/TeacherAssignmentsProgressSection';
 import { TeacherLibrarySection } from '@/components/teacher/TeacherLibrarySection';
 import { TeacherMessagesHubSection } from '@/components/teacher/TeacherMessagesHubSection';
 import { TeacherSidebar } from '@/components/teacher/TeacherSidebar';
+import { FacultyBoardModal } from '@/components/teacher/FacultyBoardModal';
+import { WeeklyDigestModal } from '@/components/teacher/WeeklyDigestModal';
 import {
   TeacherStudentAnalyticsModal,
   type TeacherAnalyticsStudentTarget,
@@ -100,6 +108,7 @@ interface TeacherPanelProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -109,13 +118,29 @@ interface TeacherPanelProps {
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkMessagesRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   unreadByAssignment: Record<string, number>;
   unreadMessageTotal: number;
+  onLoadStudentFaculty: (studentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: FacultyColleague[];
+  }>;
+  onGenerateWeeklyDigest: (studentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: WeeklyDigestRow;
+  }>;
+  onPublishWeeklyDigest: (
+    digestId: string,
+    body?: string | null,
+  ) => Promise<{ success: boolean; error?: string }>;
   onLoadStudentAnalytics: (studentId: string) => Promise<{
     success: boolean;
     error?: string;
@@ -133,6 +158,8 @@ interface TeacherPanelProps {
     studentCount: number;
     pendingInvites: number;
     totalAttempts: number;
+    libraryMaterialCount: number;
+    assignmentVolume: number;
   };
   panelDataError: string | null;
 }
@@ -212,6 +239,9 @@ export function TeacherPanel({
   onMarkMessagesRead,
   unreadByAssignment,
   unreadMessageTotal,
+  onLoadStudentFaculty,
+  onGenerateWeeklyDigest,
+  onPublishWeeklyDigest,
   onLoadStudentAnalytics,
   onLoadStudentCareerInsight,
   stats,
@@ -220,6 +250,15 @@ export function TeacherPanel({
   const router = useRouter();
   const [studentMessageTarget, setStudentMessageTarget] =
     useState<MessageThreadTarget | null>(null);
+  const [facultyMessageTarget, setFacultyMessageTarget] =
+    useState<MessageThreadTarget | null>(null);
+  const [facultyBoardStudentId, setFacultyBoardStudentId] = useState<
+    string | null
+  >(null);
+  const [facultyBoardStudentName, setFacultyBoardStudentName] =
+    useState<string>('');
+  const [digestStudentId, setDigestStudentId] = useState<string | null>(null);
+  const [digestStudentName, setDigestStudentName] = useState<string>('');
   const [analyticsTarget, setAnalyticsTarget] =
     useState<TeacherAnalyticsStudentTarget | null>(null);
   const [careerInsightTarget, setCareerInsightTarget] =
@@ -287,12 +326,26 @@ export function TeacherPanel({
 
         {activeTab === 'overview' ? (
           <div className="space-y-6">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <OverviewStatCard
                 icon={Users}
                 label="Bağlı Aktif Öğrenci"
                 value={stats.studentCount}
                 accent="from-emerald-400 to-teal-500"
+              />
+              <OverviewStatCard
+                icon={BookOpen}
+                label="Kütüphane Materyali"
+                value={stats.libraryMaterialCount}
+                accent="from-violet-400 to-fuchsia-500"
+                breakdown="Başlıklı kayıtlar"
+              />
+              <OverviewStatCard
+                icon={ClipboardList}
+                label="Atanan Görev Hacmi"
+                value={stats.assignmentVolume}
+                accent="from-indigo-400 to-cyan-500"
+                breakdown="Kütüphaneye bağlı atamalar"
               />
               <OverviewStatCard
                 icon={Clock}
@@ -334,6 +387,14 @@ export function TeacherPanel({
             onLoadConversation={onLoadConversation}
             onSendMessage={onSendMessage}
             onMarkMessagesRead={onMarkMessagesRead}
+            onOpenFacultyBoard={(studentId, studentName) => {
+              setFacultyBoardStudentId(studentId);
+              setFacultyBoardStudentName(studentName);
+            }}
+            onOpenWeeklyDigest={(studentId, studentName) => {
+              setDigestStudentId(studentId);
+              setDigestStudentName(studentName);
+            }}
           />
         ) : null}
 
@@ -527,13 +588,14 @@ export function TeacherPanel({
                             <div className="flex flex-wrap justify-end gap-2">
                               <button
                                 type="button"
-                                onClick={() =>
+                                onClick={() => {
+                                  setFacultyMessageTarget(null);
                                   setStudentMessageTarget({
                                     partnerId: student.studentId,
                                     partnerLabel: student.fullName,
                                     contextLabel: 'Genel mesaj',
-                                  })
-                                }
+                                  });
+                                }}
                                 className="relative inline-flex items-center gap-1 rounded-md border border-violet-400/45 bg-violet-500/15 px-2.5 py-1 text-[11px] font-medium text-violet-100 transition hover:bg-violet-500/25"
                               >
                                 <MessageCircle className="size-3" />
@@ -547,6 +609,28 @@ export function TeacherPanel({
                                   }
                                   className="absolute -top-1.5 -right-1.5"
                                 />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFacultyBoardStudentId(student.studentId);
+                                  setFacultyBoardStudentName(student.fullName);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-fuchsia-400/40 bg-fuchsia-500/12 px-2.5 py-1 text-[11px] font-medium text-fuchsia-100 transition hover:bg-fuchsia-500/22"
+                              >
+                                <span aria-hidden>🎓</span>
+                                Ortak Eğitmenler
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDigestStudentId(student.studentId);
+                                  setDigestStudentName(student.fullName);
+                                }}
+                                className="inline-flex items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-500/12 px-2.5 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-500/22"
+                              >
+                                <span aria-hidden>📝</span>
+                                Haftalık Değerlendirme
                               </button>
                               <button
                                 type="button"
@@ -610,6 +694,49 @@ export function TeacherPanel({
           onLoadConversation={onLoadConversation}
           onSendMessage={onSendMessage}
           onMarkRead={onMarkMessagesRead}
+        />
+
+        <MessageConversationModal
+          key="faculty-teacher-thread"
+          target={facultyMessageTarget}
+          onClose={() => {
+            setFacultyMessageTarget(null);
+            router.refresh();
+          }}
+          onLoadConversation={onLoadConversation}
+          onSendMessage={onSendMessage}
+          onMarkRead={onMarkMessagesRead}
+        />
+
+        <FacultyBoardModal
+          studentId={facultyBoardStudentId}
+          studentName={facultyBoardStudentName}
+          unreadByAssignment={unreadByAssignment}
+          onClose={() => {
+            setFacultyBoardStudentId(null);
+            setFacultyBoardStudentName('');
+          }}
+          onLoadFaculty={onLoadStudentFaculty}
+          onOpenFacultyMessage={(colleague, studentContextId) => {
+            setStudentMessageTarget(null);
+            setFacultyMessageTarget({
+              partnerId: colleague.teacherId,
+              partnerLabel: colleague.fullName,
+              studentContextId,
+              contextLabel: `Ortak öğrenci bağlamı · ${facultyBoardStudentName || 'Öğrenci'}`,
+            });
+          }}
+        />
+
+        <WeeklyDigestModal
+          studentId={digestStudentId}
+          studentName={digestStudentName}
+          onClose={() => {
+            setDigestStudentId(null);
+            setDigestStudentName('');
+          }}
+          onGenerate={onGenerateWeeklyDigest}
+          onPublish={onPublishWeeklyDigest}
         />
 
         <TeacherStudentAnalyticsModal

@@ -89,6 +89,7 @@ interface StudentPanelProps {
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{
     success: boolean;
     error?: string;
@@ -98,10 +99,12 @@ interface StudentPanelProps {
     receiverId: string,
     content: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   onMarkMessagesRead: (
     senderId: string,
     assignmentId?: string,
+    studentContextId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   unreadByAssignment: Record<string, number>;
   analytics: StudentAnalyticsData;
