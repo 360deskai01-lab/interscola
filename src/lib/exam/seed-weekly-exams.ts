@@ -7,6 +7,13 @@ import type { AssessmentPayload } from '@/types/exam';
 const POOL_SAT_QUESTIONS = 10;
 const POOL_IELTS_QUESTIONS = 2;
 
+/** SAT ve IELTS üretimlerini aynı cron turunda üst üste binmeden sıralamak için nefes payı (ms). */
+const BETWEEN_POOL_EXAMS_MS = 1_500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function isoWeekLabel(date = new Date()): string {
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const day = target.getUTCDay() || 7;
@@ -58,7 +65,9 @@ async function insertPublicLibraryRow(input: {
       verification_status: 'verified',
       teacher_id: null,
     })
-    .select('id')
+    .select(
+      'id, title, curriculum, subject, extracted_text, exam_payload, is_public, verification_status, teacher_id',
+    )
     .single();
 
   if (error || !data) {
@@ -67,7 +76,37 @@ async function insertPublicLibraryRow(input: {
     };
   }
 
-  return { id: (data as { id: string }).id };
+  const row = data as {
+    id: string;
+    title: string;
+    curriculum: string;
+    subject: string;
+    extracted_text: string | null;
+    exam_payload: unknown;
+    is_public: boolean | null;
+    verification_status: string | null;
+    teacher_id: string | null;
+  };
+
+  const payloadOk =
+    JSON.stringify(row.exam_payload) === JSON.stringify(input.exam);
+  const metaOk =
+    row.title === input.title &&
+    row.curriculum === input.curriculum &&
+    row.subject === input.subject &&
+    row.extracted_text === input.extractedText &&
+    row.is_public === true &&
+    row.verification_status === 'verified' &&
+    row.teacher_id === null;
+
+  if (!payloadOk || !metaOk) {
+    return {
+      error:
+        'Kütüphane kaydı oluşturuldu ancak okunan satır istenen exam_payload / meta ile eşleşmiyor.',
+    };
+  }
+
+  return { id: row.id };
 }
 
 export async function seedWeeklyPublicExams(): Promise<{
@@ -108,6 +147,8 @@ export async function seedWeeklyPublicExams(): Promise<{
       `SAT üretimi: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+
+  await sleep(BETWEEN_POOL_EXAMS_MS);
 
   try {
     const ieltsRaw = await runGenerateExam({

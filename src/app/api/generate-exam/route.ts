@@ -70,8 +70,14 @@ const PERMISSION_DENIED_MESSAGE =
   'Google Gemini API yetkilendirme hatası (403 PERMISSION_DENIED). ' +
   'Lütfen geçerli bir API anahtarı kullanın.';
 
-/** Kullanılan tek model. Google AI Studio kataloğuyla doğrulandı. */
-const MODEL = 'gemini-3.6-flash';
+/** Birincil üretim modeli (yoğunluk/503 veya kota/429 sonrası yedek modele düşülür). */
+const MODEL_PRIMARY = 'gemini-3.6-flash';
+/** Yoğun küme veya kota yanıtından sonra tek deneme için yedek model. */
+const MODEL_FALLBACK = 'gemini-2.5-flash';
+/** 503/429 sonrası yedek modele geçmeden önce bekleme (ms). */
+const MODEL_FALLBACK_BACKOFF_MS = 2_000;
+
+const MODEL_LINE_FOR_LOG = `${MODEL_PRIMARY} (yedek: ${MODEL_FALLBACK})`;
 
 /**
  * Yanıt uzunluğu sınırı. Prompt'taki "kısa tut" talimatı bu değerle aynı
@@ -160,12 +166,14 @@ function errorMessageOf(error: unknown): string {
  * SDK bir `ApiError` fırlatır ve `status` alanında HTTP kodunu taşır.
  * Teşhis için durum kodu ve sağlayıcının ham mesajı korunur.
  */
-function toProviderError(error: unknown): never {
+function toProviderError(error: unknown, modelLabel?: string): never {
   if (error instanceof ProviderError) throw error;
+
+  const label = modelLabel ?? MODEL_PRIMARY;
 
   if (isTimeoutError(error)) {
     throw new ProviderError(
-      `Gemini çağrısı zaman aşımına düştü (model: ${MODEL}).`,
+      `Gemini çağrısı zaman aşımına düştü (model: ${label}).`,
       { providerMessage: errorMessageOf(error) },
     );
   }
@@ -174,7 +182,7 @@ function toProviderError(error: unknown): never {
 
   if (status !== undefined && RETRYABLE_STATUS.has(status)) {
     throw new ProviderError(
-      `Sağlayıcı geçici hata döndürdü (HTTP ${status}, model: ${MODEL}).`,
+      `Sağlayıcı geçici hata döndürdü (HTTP ${status}, model: ${label}).`,
       { statusCode: status, providerMessage: errorMessageOf(error) },
     );
   }
@@ -184,6 +192,52 @@ function toProviderError(error: unknown): never {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function generateContentWithPrimaryThenFallback(
+  ai: GoogleGenAI,
+  args: {
+    contents: ReturnType<typeof buildPrompt>;
+    maxOutputTokens: number;
+    attemptTimeout: number;
+  },
+): Promise<Awaited<ReturnType<typeof ai.models.generateContent>>> {
+  try {
+    return await ai.models.generateContent({
+      model: MODEL_PRIMARY,
+      contents: args.contents,
+      config: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+        maxOutputTokens: args.maxOutputTokens,
+        abortSignal: AbortSignal.timeout(args.attemptTimeout),
+      },
+    });
+  } catch (error) {
+    const status = errorStatusOf(error);
+    if (status === 503 || status === 429) {
+      console.warn(
+        `[generate-exam] Birincil model yoğun/kotada (HTTP ${status}), ` +
+          `${MODEL_FALLBACK_BACKOFF_MS} ms bekleyip yedek model deneniyor: ${MODEL_FALLBACK}`,
+      );
+      await sleep(MODEL_FALLBACK_BACKOFF_MS);
+      try {
+        return await ai.models.generateContent({
+          model: MODEL_FALLBACK,
+          contents: args.contents,
+          config: {
+            responseMimeType: 'application/json',
+            temperature: 0.1,
+            maxOutputTokens: args.maxOutputTokens,
+            abortSignal: AbortSignal.timeout(args.attemptTimeout),
+          },
+        });
+      } catch (fallbackError) {
+        toProviderError(fallbackError, MODEL_FALLBACK);
+      }
+    }
+    toProviderError(error, MODEL_PRIMARY);
+  }
 }
 
 function errorResponse(message: string, status: number) {
@@ -710,18 +764,13 @@ async function generateOnce(
         : Math.max(MIN_ATTEMPT_WINDOW_MS, Math.floor(timeoutMs * 0.55));
 
     let response: Awaited<ReturnType<typeof ai.models.generateContent>>;
+    const contents = buildPrompt(input);
 
     try {
-      response = await ai.models.generateContent({
-        model: MODEL,
-        contents: buildPrompt(input),
-        config: {
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens,
-          // Çağrı takılırsa bütçe sınırına çarpmadan kendimiz iptal ederiz.
-          abortSignal: AbortSignal.timeout(attemptTimeout),
-        },
+      response = await generateContentWithPrimaryThenFallback(ai, {
+        contents,
+        maxOutputTokens,
+        attemptTimeout,
       });
     } catch (error) {
       // Zaman aşımı ve SDK'nın fırlattığı 403/429/503 gibi hatalar burada sınıflandırılır.
@@ -801,7 +850,7 @@ async function generateWithRetry(
 
     console.info(
       `[generate-exam] Deneme ${attempt + 1}/${MAX_TRANSIENT_RETRIES + 1} ` +
-        `(model: ${MODEL}, timeout: ${Math.round(timeoutMs / 1000)} sn)`,
+        `(model: ${MODEL_LINE_FOR_LOG}, timeout: ${Math.round(timeoutMs / 1000)} sn)`,
     );
 
     try {
@@ -811,8 +860,9 @@ async function generateWithRetry(
 
       lastError = error;
 
-      // 403 ve 429 kalıcıdır: retry sonucu değiştirmez, doğrudan fırlat.
-      if (error.statusCode === 403 || error.statusCode === 429) {
+      // 403 kalıcıdır. 429/503 için generateOnce içinde yedek modele düşüldükten sonra
+      // hâlâ ProviderError geliyorsa üst katman retry (generateWithRetry) veya son hata.
+      if (error.statusCode === 403) {
         console.warn(
           `[generate-exam] Kalıcı hata (HTTP ${error.statusCode}), retry yapılmayacak:`,
           error.providerMessage ?? error.message,
@@ -901,7 +951,7 @@ export async function POST(request: NextRequest) {
       console.error(
         '[generate-exam] Sağlayıcı hatası.',
         {
-          model: MODEL,
+          model: MODEL_LINE_FOR_LOG,
           statusCode: error.statusCode ?? 'yok',
           message: error.message,
           providerMessage: error.providerMessage ?? 'yok',
@@ -924,7 +974,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof QuestionCountMismatchError) {
       console.error('[generate-exam] Retry sonrası soru sayısı hâlâ uyuşmuyor.', {
-        model: MODEL,
+        model: MODEL_LINE_FOR_LOG,
         message: error.message,
       });
       return errorResponse(
@@ -935,7 +985,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof ModelOutputError) {
       console.error('[generate-exam] Model şema ihlali.', {
-        model: MODEL,
+        model: MODEL_LINE_FOR_LOG,
         message: error.message,
       });
       return errorResponse(
@@ -945,7 +995,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('[generate-exam] Sınav üretimi başarısız.', {
-      model: MODEL,
+      model: MODEL_LINE_FOR_LOG,
       statusCode: errorStatusOf(error) ?? 'yok',
       errorName: error instanceof Error ? error.name : typeof error,
       message: errorMessageOf(error),
