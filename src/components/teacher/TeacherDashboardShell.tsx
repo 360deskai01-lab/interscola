@@ -10,6 +10,7 @@ import type {
 import type { ConversationMessage } from '@/app/messages/actions';
 import type { AssessmentPayload } from '@/types/exam';
 import type {
+  LibraryAssignmentHistoryRow,
   LibraryItem,
   TeacherAssignmentProgressRow,
 } from '@/app/teacher/library-actions';
@@ -57,6 +58,11 @@ export interface TeacherDashboardShellProps {
     success: boolean;
     error?: string;
     exam?: AssessmentPayload;
+  }>;
+  onLoadLibraryAssignmentHistory: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: LibraryAssignmentHistoryRow[];
   }>;
   onLoadConversation: (
     partnerId: string,

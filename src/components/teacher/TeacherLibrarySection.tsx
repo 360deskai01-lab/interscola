@@ -9,15 +9,21 @@ import {
   CheckCircle2,
   Loader2,
 } from 'lucide-react';
-import type { LibraryItem } from '@/app/teacher/library-actions';
+import type {
+  LibraryItem,
+  LibraryAssignmentHistoryRow,
+  TeacherAssignmentProgressRow,
+} from '@/app/teacher/library-actions';
 import type { TeacherStudent } from '@/app/teacher/actions';
 import { EXAM_MODES } from '@/lib/exam-shared';
 import type { AssessmentPayload } from '@/types/exam';
 import { LibraryExamPreviewModal } from '@/components/teacher/LibraryExamPreviewModal';
+import { LibraryExamHistoryModal } from '@/components/teacher/LibraryExamHistoryModal';
 
 interface TeacherLibrarySectionProps {
   items: LibraryItem[];
   students: TeacherStudent[];
+  assignmentProgress: TeacherAssignmentProgressRow[];
   onCreateLibrary: (input: {
     title: string;
     curriculum: string;
@@ -41,6 +47,11 @@ interface TeacherLibrarySectionProps {
     success: boolean;
     error?: string;
     exam?: AssessmentPayload;
+  }>;
+  onLoadLibraryAssignmentHistory: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: LibraryAssignmentHistoryRow[];
   }>;
 }
 
@@ -70,13 +81,32 @@ function formatDate(iso: string): string {
   }).format(date);
 }
 
+const ACTIVE_STATUSES = new Set(['assigned', 'in_progress']);
+
+function studentIdsBlockedForLibrary(
+  libraryId: string,
+  assignmentType: 'study' | 'exam',
+  progress: TeacherAssignmentProgressRow[],
+): Set<string> {
+  const blocked = new Set<string>();
+  for (const row of progress) {
+    if (row.libraryId !== libraryId) continue;
+    if (row.assignmentType !== assignmentType) continue;
+    if (!ACTIVE_STATUSES.has(String(row.status))) continue;
+    blocked.add(row.studentId);
+  }
+  return blocked;
+}
+
 export function TeacherLibrarySection({
   items,
   students,
+  assignmentProgress,
   onCreateLibrary,
   onAssignMaterial,
   onAssignGeneratedExam,
   onGenerateExamFromLibrary,
+  onLoadLibraryAssignmentHistory,
 }: TeacherLibrarySectionProps): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -95,6 +125,8 @@ export function TeacherLibrarySection({
   const [previewLibraryId, setPreviewLibraryId] = useState<string | null>(null);
   const [previewLibraryTitle, setPreviewLibraryTitle] = useState('');
   const [previewExam, setPreviewExam] = useState<AssessmentPayload | null>(null);
+  const [historyLibraryId, setHistoryLibraryId] = useState<string | null>(null);
+  const [historyLibraryTitle, setHistoryLibraryTitle] = useState('');
   const [assignDrafts, setAssignDrafts] = useState<
     Record<string, { studentId: string; dueLocal: string }>
   >({});
@@ -138,6 +170,16 @@ export function TeacherLibrarySection({
     setPreviewLibraryId(null);
     setPreviewLibraryTitle('');
     setPreviewExam(null);
+  }
+
+  function openHistory(item: LibraryItem) {
+    setHistoryLibraryId(item.id);
+    setHistoryLibraryTitle(item.title);
+  }
+
+  function closeHistory() {
+    setHistoryLibraryId(null);
+    setHistoryLibraryTitle('');
   }
 
   function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -326,7 +368,13 @@ export function TeacherLibrarySection({
           </div>
         ) : (
           <ul className="divide-y divide-white/5">
-            {items.map((item) => (
+            {items.map((item) => {
+              const blockedStudyIds = studentIdsBlockedForLibrary(
+                item.id,
+                'study',
+                assignmentProgress,
+              );
+              return (
               <li key={item.id} className="flex flex-col">
                 <div className="w-full px-6 pt-4 pb-3">
                   <h3 className="w-full break-words text-[15px] font-semibold leading-snug text-slate-100">
@@ -376,8 +424,14 @@ export function TeacherLibrarySection({
                               <option
                                 key={student.studentId}
                                 value={student.studentId}
+                                disabled={blockedStudyIds.has(
+                                  student.studentId,
+                                )}
                               >
                                 {student.fullName}
+                                {blockedStudyIds.has(student.studentId)
+                                  ? ' (Zaten Atandı)'
+                                  : ''}
                               </option>
                             ))}
                           </select>
@@ -405,6 +459,14 @@ export function TeacherLibrarySection({
                     </div>
 
                     <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openHistory(item)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.04] px-3.5 py-2.5 text-xs font-medium text-slate-200 transition hover:border-white/25 hover:bg-white/[0.07]"
+                      >
+                        <span aria-hidden>👥</span>
+                        Atama Geçmişi
+                      </button>
                       <button
                         type="button"
                         disabled={
@@ -446,7 +508,8 @@ export function TeacherLibrarySection({
                   </div>
                 </div>
               </li>
-            ))}
+            );
+            })}
           </ul>
         )}
       </div>
@@ -456,8 +519,24 @@ export function TeacherLibrarySection({
         libraryTitle={previewLibraryTitle}
         exam={previewExam}
         students={students}
+        blockedStudentIds={
+          previewLibraryId
+            ? [...studentIdsBlockedForLibrary(
+                previewLibraryId,
+                'exam',
+                assignmentProgress,
+              )]
+            : []
+        }
         onClose={closePreview}
         onAssignGeneratedExam={onAssignGeneratedExam}
+      />
+
+      <LibraryExamHistoryModal
+        libraryId={historyLibraryId}
+        libraryTitle={historyLibraryTitle}
+        onClose={closeHistory}
+        onLoadHistory={onLoadLibraryAssignmentHistory}
       />
     </div>
   );

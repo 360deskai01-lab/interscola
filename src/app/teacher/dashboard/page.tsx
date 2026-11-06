@@ -17,6 +17,7 @@ import {
   assignMaterialFormAction,
   createLibraryFormAction,
   generateExamFromLibraryFormAction,
+  getLibraryAssignmentHistoryFormAction,
   getTeacherAssignmentsProgressAction,
   getTeacherLibraryAction,
 } from '../library-actions';
@@ -162,6 +163,7 @@ export default async function TeacherDashboardPage({
           onAssignMaterial={assignMaterialFormAction}
           onAssignGeneratedExam={assignGeneratedExamFormAction}
           onGenerateExamFromLibrary={generateExamFromLibraryFormAction}
+          onLoadLibraryAssignmentHistory={getLibraryAssignmentHistoryFormAction}
           onLoadConversation={getConversationFormAction}
           onSendMessage={sendMessageFormAction}
           onMarkMessagesRead={markMessagesAsReadFormAction}

@@ -714,6 +714,7 @@ export interface TeacherAssignmentExamResult {
 
 export interface TeacherAssignmentProgressRow {
   assignmentId: string;
+  libraryId: string | null;
   studentId: string;
   studentFullName: string;
   materialTitle: string;
@@ -724,6 +725,19 @@ export interface TeacherAssignmentProgressRow {
   /** Son teslim (UTC ISO); migration veya sütun yoksa null. */
   dueDate: string | null;
   /** Atama sınavı tamamlandıysa en güncel deneme sonucu. */
+  examResult: TeacherAssignmentExamResult | null;
+}
+
+/** Bir kütüphane öğesine ait atama geçmişi (öğretmen çekmecesi). */
+export interface LibraryAssignmentHistoryRow {
+  assignmentId: string;
+  studentFullName: string;
+  assignedAt: string;
+  dueDate: string | null;
+  assignmentType: AssignmentType;
+  status: AssignmentWorkflowStatus;
+  /** Tamamlandı / Devam Ediyor / Gecikti */
+  workflowLabel: 'Tamamlandı' | 'Devam Ediyor' | 'Gecikti';
   examResult: TeacherAssignmentExamResult | null;
 }
 
@@ -749,6 +763,7 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
 
     type ProgressRow = {
       id: string;
+      library_id: string | null;
       status: string;
       created_at: string;
       due_date: string | null;
@@ -767,6 +782,7 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       .select(
         `
         id,
+        library_id,
         status,
         created_at,
         due_date,
@@ -789,6 +805,7 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
         .select(
           `
         id,
+        library_id,
         status,
         created_at,
         student_id,
@@ -924,6 +941,10 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
 
       return {
         assignmentId: row.id,
+        libraryId:
+          typeof row.library_id === 'string' && row.library_id.trim()
+            ? row.library_id
+            : null,
         studentId: row.student_id,
         studentFullName:
           studentNameById.get(row.student_id) ?? 'İsimsiz öğrenci',
@@ -950,6 +971,258 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       error instanceof Error ? error.message : String(error),
     );
     return { success: false, error: 'Ödev ilerlemesi yüklenemedi.' };
+  }
+}
+
+function computeAssignmentWorkflowLabel(
+  status: string,
+  dueDateIso: string | null,
+): LibraryAssignmentHistoryRow['workflowLabel'] {
+  if (status === 'completed') {
+    return 'Tamamlandı';
+  }
+  const dueMs =
+    typeof dueDateIso === 'string' && dueDateIso.trim()
+      ? new Date(dueDateIso).getTime()
+      : NaN;
+  if (!Number.isNaN(dueMs) && dueMs < Date.now()) {
+    return 'Gecikti';
+  }
+  return 'Devam Ediyor';
+}
+
+/**
+ * Tek bir kütüphane öğesine yapılan tüm atamaları listeler (öğretmen çekmecesi).
+ */
+export async function getLibraryAssignmentHistoryAction(
+  libraryId: string,
+): Promise<LibraryActionResult<LibraryAssignmentHistoryRow[]>> {
+  try {
+    const teacher = await requireApprovedTeacher();
+    if (!teacher) {
+      return {
+        success: false,
+        error: 'Bu veri için onaylı öğretmen hesabı gerekiyor.',
+      };
+    }
+
+    if (!UUID_PATTERN.test(libraryId)) {
+      return { success: false, error: 'Geçersiz materyal kimliği.' };
+    }
+
+    const client = await getProfilesClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const { data: library, error: libraryError } = await client
+      .from('libraries')
+      .select('id, teacher_id')
+      .eq('id', libraryId)
+      .maybeSingle();
+
+    if (libraryError) {
+      console.error('[library] Materyal okunamadı:', libraryError.message);
+      return { success: false, error: 'Materyal bulunamadı.' };
+    }
+
+    if (!library) {
+      return { success: false, error: 'Materyal bulunamadı.' };
+    }
+
+    if ((library as { teacher_id: string }).teacher_id !== teacher.id) {
+      return { success: false, error: 'Bu materyal size ait değil.' };
+    }
+
+    type HistoryRawRow = {
+      id: string;
+      status: string;
+      created_at: string;
+      due_date: string | null;
+      student_id: string;
+      assignment_type: string | null;
+      exam_payload: unknown;
+    };
+
+    let rows: HistoryRawRow[] = [];
+    let { data: rowsRaw, error: assignError } = await client
+      .from('assignments')
+      .select(
+        `
+        id,
+        status,
+        created_at,
+        due_date,
+        student_id,
+        assignment_type,
+        exam_payload
+      `,
+      )
+      .eq('library_id', libraryId)
+      .eq('teacher_id', teacher.id)
+      .order('created_at', { ascending: false });
+
+    rows = (rowsRaw ?? []) as HistoryRawRow[];
+
+    if (assignError?.code === '42703') {
+      const fb = await client
+        .from('assignments')
+        .select(
+          `
+        id,
+        status,
+        created_at,
+        student_id,
+        assignment_type,
+        exam_payload
+      `,
+        )
+        .eq('library_id', libraryId)
+        .eq('teacher_id', teacher.id)
+        .order('created_at', { ascending: false });
+      rows = ((fb.data ?? []) as Omit<HistoryRawRow, 'due_date'>[]).map(
+        (r) => ({ ...r, due_date: null }),
+      );
+      assignError = fb.error;
+    }
+
+    if (assignError) {
+      console.error(
+        '[library] Atama geçmişi okunamadı:',
+        assignError.message,
+      );
+      return { success: false, error: 'Atama geçmişi okunamadı.' };
+    }
+
+    const studentIds = [
+      ...new Set(
+        rows
+          .map((row) => row.student_id)
+          .filter((id): id is string => typeof id === 'string'),
+      ),
+    ];
+
+    const studentNameById = new Map<string, string>();
+
+    if (studentIds.length > 0) {
+      const { data: profiles, error: profileError } = await client
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', studentIds);
+
+      if (profileError) {
+        console.error(
+          '[library] Öğrenci profilleri okunamadı:',
+          profileError.message,
+        );
+      } else {
+        for (const profile of profiles ?? []) {
+          const row = profile as {
+            id: string;
+            full_name: string | null;
+            email: string;
+          };
+          studentNameById.set(
+            row.id,
+            row.full_name?.trim() || row.email || 'İsimsiz öğrenci',
+          );
+        }
+      }
+    }
+
+    const assignmentIds = rows.map((row) => row.id);
+
+    const latestAttemptByAssignment = new Map<
+      string,
+      TeacherAssignmentExamResult
+    >();
+
+    if (assignmentIds.length > 0) {
+      const attemptsClient = getSupabaseAdmin('interscola');
+      if (attemptsClient) {
+        const { data: attemptRows, error: attemptsError } =
+          await attemptsClient
+            .from(ATTEMPTS_TABLE)
+            .select('assignment_id, scaled_result, percentage, created_at')
+            .in('assignment_id', assignmentIds)
+            .order('created_at', { ascending: false });
+
+        if (attemptsError) {
+          console.error(
+            '[library] Geçmiş denemeler okunamadı:',
+            attemptsError.message,
+          );
+        } else {
+          for (const attempt of attemptRows ?? []) {
+            const item = attempt as {
+              assignment_id: string | null;
+              scaled_result: string | null;
+              percentage: number | null;
+            };
+            if (
+              !item.assignment_id ||
+              latestAttemptByAssignment.has(item.assignment_id)
+            ) {
+              continue;
+            }
+            if (
+              typeof item.scaled_result !== 'string' ||
+              !item.scaled_result.trim()
+            ) {
+              continue;
+            }
+            const percentage =
+              typeof item.percentage === 'number' &&
+              Number.isFinite(item.percentage)
+                ? item.percentage
+                : 0;
+
+            latestAttemptByAssignment.set(item.assignment_id, {
+              scaledResult: item.scaled_result.trim(),
+              percentage,
+            });
+          }
+        }
+      }
+    }
+
+    const data: LibraryAssignmentHistoryRow[] = rows.map((row) => {
+      const assignmentType: AssignmentType =
+        row.assignment_type === 'exam' ||
+        row.assignment_type === 'study'
+          ? row.assignment_type
+          : hasStoredExamPayload(row.exam_payload)
+            ? 'exam'
+            : 'study';
+
+      const dueDate =
+        typeof row.due_date === 'string' && row.due_date.trim()
+          ? row.due_date
+          : null;
+
+      return {
+        assignmentId: row.id,
+        studentFullName:
+          studentNameById.get(row.student_id) ?? 'İsimsiz öğrenci',
+        assignedAt: row.created_at,
+        dueDate,
+        assignmentType,
+        status: row.status,
+        workflowLabel: computeAssignmentWorkflowLabel(row.status, dueDate),
+        examResult:
+          assignmentType === 'exam'
+            ? (latestAttemptByAssignment.get(row.id) ?? null)
+            : null,
+      };
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error(
+      '[library] getLibraryAssignmentHistoryAction hatası:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Atama geçmişi yüklenemedi.' };
   }
 }
 
@@ -1153,4 +1426,19 @@ export async function sendAssignmentOverdueReminderFormAction(
     materialTitle,
   );
   return { success: result.success, error: result.error };
+}
+
+export async function getLibraryAssignmentHistoryFormAction(
+  libraryId: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  data?: LibraryAssignmentHistoryRow[];
+}> {
+  const result = await getLibraryAssignmentHistoryAction(libraryId);
+  return {
+    success: result.success,
+    error: result.error,
+    data: result.data,
+  };
 }

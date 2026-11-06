@@ -25,6 +25,7 @@ import type {
 import type { ConversationMessage } from '@/app/messages/actions';
 import type { AssessmentPayload } from '@/types/exam';
 import type {
+  LibraryAssignmentHistoryRow,
   LibraryItem,
   TeacherAssignmentProgressRow,
 } from '@/app/teacher/library-actions';
@@ -90,6 +91,11 @@ interface TeacherPanelProps {
     success: boolean;
     error?: string;
     exam?: AssessmentPayload;
+  }>;
+  onLoadLibraryAssignmentHistory: (libraryId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: LibraryAssignmentHistoryRow[];
   }>;
   onLoadConversation: (
     partnerId: string,
@@ -200,6 +206,7 @@ export function TeacherPanel({
   onAssignMaterial,
   onAssignGeneratedExam,
   onGenerateExamFromLibrary,
+  onLoadLibraryAssignmentHistory,
   onLoadConversation,
   onSendMessage,
   onMarkMessagesRead,
@@ -334,10 +341,12 @@ export function TeacherPanel({
           <TeacherLibrarySection
             items={libraryItems}
             students={students}
+            assignmentProgress={assignmentProgress}
             onCreateLibrary={onCreateLibrary}
             onAssignMaterial={onAssignMaterial}
             onAssignGeneratedExam={onAssignGeneratedExam}
             onGenerateExamFromLibrary={onGenerateExamFromLibrary}
+            onLoadLibraryAssignmentHistory={onLoadLibraryAssignmentHistory}
           />
         ) : null}
 

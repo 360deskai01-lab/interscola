@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type ReactNode } from 'react';
 import {
   AlertTriangle,
   Loader2,
@@ -16,6 +16,8 @@ interface LibraryExamPreviewModalProps {
   libraryTitle: string;
   exam: AssessmentPayload | null;
   students: TeacherStudent[];
+  /** Bu `library_id` için aktif sınav ataması olan öğrenci kimlikleri (devre dışı seçenek). */
+  blockedStudentIds?: string[];
   onClose: () => void;
   onAssignGeneratedExam: (
     libraryId: string,
@@ -54,6 +56,7 @@ export function LibraryExamPreviewModal({
   libraryTitle,
   exam,
   students,
+  blockedStudentIds = [],
   onClose,
   onAssignGeneratedExam,
 }: LibraryExamPreviewModalProps): ReactNode {
@@ -62,7 +65,18 @@ export function LibraryExamPreviewModal({
   const [studentId, setStudentId] = useState('');
   const [dueLocal, setDueLocal] = useState('');
 
+  const blockedKey = blockedStudentIds.join(',');
+  useEffect(() => {
+    if (!studentId || !libraryId) return;
+    const blocked = new Set(blockedStudentIds);
+    if (blocked.has(studentId)) {
+      setStudentId('');
+    }
+  }, [libraryId, blockedKey, studentId]);
+
   if (!exam || !libraryId) return null;
+
+  const blockedSet = new Set(blockedStudentIds);
 
   function dueLocalToIsoOrNull(raw: string): string | null {
     const t = raw.trim();
@@ -217,11 +231,19 @@ export function LibraryExamPreviewModal({
                 aria-label="Atanacak öğrenci"
               >
                 <option value="">Öğrenci seç…</option>
-                {students.map((student) => (
-                  <option key={student.studentId} value={student.studentId}>
-                    {student.fullName}
-                  </option>
-                ))}
+                {students.map((student) => {
+                  const blocked = blockedSet.has(student.studentId);
+                  return (
+                    <option
+                      key={student.studentId}
+                      value={student.studentId}
+                      disabled={blocked}
+                    >
+                      {student.fullName}
+                      {blocked ? ' (Zaten Atandı)' : ''}
+                    </option>
+                  );
+                })}
               </select>
               <label className="flex min-w-[200px] flex-1 flex-col text-[10px] font-medium text-slate-500">
                 Son teslim (opsiyonel)

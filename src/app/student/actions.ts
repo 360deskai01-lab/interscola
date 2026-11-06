@@ -12,6 +12,10 @@ import {
   loadStudentAnalyticsData,
   type StudentAnalyticsData,
 } from '@/lib/student-analytics';
+import {
+  type LibraryExamFormat,
+  resolveLibraryExamFormat,
+} from '@/lib/exam/library-exam-format';
 
 export type {
   StudentAnalyticsData,
@@ -189,6 +193,10 @@ export interface StudentAssignment {
   /** Son teslim (ISO); sütun yoksa null. */
   dueDate: string | null;
   assignmentType: StudentAssignmentType;
+  /** `libraries.exam_format`; migration veya join yoksa null. */
+  libraryExamFormat: LibraryExamFormat | null;
+  /** Sınav payload'ındaki soru sayısı (çıkarım için). */
+  examQuestionCount: number | null;
   /** Çalışma ataması için okuma metni (study). */
   studyMaterialText: string | null;
   /** Tamamlanan sınav sonucu (exam). */
@@ -203,6 +211,12 @@ function normalizeAssignmentType(
     return assignmentType;
   }
   return hasStoredExamPayload(examPayload) ? 'exam' : 'study';
+}
+
+function examPayloadQuestionCount(examPayload: unknown): number | null {
+  if (!examPayload || typeof examPayload !== 'object') return null;
+  const questions = (examPayload as { questions?: unknown }).questions;
+  return Array.isArray(questions) ? questions.length : null;
 }
 
 /**
@@ -241,8 +255,18 @@ export async function getStudentAssignmentsAction(): Promise<{
       assignment_type: string | null;
       exam_payload: unknown;
       libraries:
-        | { title: string; curriculum: string; extracted_text: string | null }
-        | { title: string; curriculum: string; extracted_text: string | null }[]
+        | {
+            title: string;
+            curriculum: string;
+            extracted_text: string | null;
+            exam_format?: unknown;
+          }
+        | {
+            title: string;
+            curriculum: string;
+            extracted_text: string | null;
+            exam_format?: unknown;
+          }[]
         | null;
     };
 
@@ -261,7 +285,8 @@ export async function getStudentAssignmentsAction(): Promise<{
         libraries (
           title,
           curriculum,
-          extracted_text
+          extracted_text,
+          exam_format
         )
       `,
       )
@@ -410,6 +435,21 @@ export async function getStudentAssignmentsAction(): Promise<{
         row.exam_payload,
       );
 
+      const examQuestionCount =
+        assignmentType === 'exam'
+          ? examPayloadQuestionCount(row.exam_payload)
+          : null;
+
+      const resolvedExamFormat: LibraryExamFormat | null =
+        assignmentType === 'exam'
+          ? resolveLibraryExamFormat(
+              library && 'exam_format' in library
+                ? library.exam_format
+                : undefined,
+              examQuestionCount,
+            )
+          : null;
+
       return {
         id: row.id,
         materialTitle: library?.title ?? 'Materyal',
@@ -424,6 +464,8 @@ export async function getStudentAssignmentsAction(): Promise<{
             ? row.due_date
             : null,
         assignmentType,
+        libraryExamFormat: resolvedExamFormat,
+        examQuestionCount,
         studyMaterialText:
           assignmentType === 'study'
             ? library?.extracted_text?.trim() || null

@@ -61,6 +61,7 @@ import {
   type StudentDashboardTab,
 } from '@/lib/student-dashboard/dashboard-tabs';
 import { computeAssignmentSidebarDot } from '@/lib/student-dashboard/assignment-dots';
+import type { LibraryExamFormat } from '@/lib/exam/library-exam-format';
 
 interface ConnectClaimResult {
   success: boolean;
@@ -146,8 +147,25 @@ function curriculumLabel(code: string): string {
   return CURRICULUM_LABELS[code] ?? code;
 }
 
-function assignmentTypeLabel(type: StudentAssignment['assignmentType']): string {
-  return type === 'exam' ? 'Resmi Sınav' : 'Çalışma Materyali';
+function assignmentFormatLabel(item: StudentAssignment): string {
+  if (item.assignmentType === 'study') {
+    return '📖 Ders Notu / İnceleme';
+  }
+  const fmt: LibraryExamFormat | null = item.libraryExamFormat;
+  if (fmt === 'full_mock') {
+    return '🏛️ Resmi Simülasyon (Full Mock)';
+  }
+  return '👨‍🏫 Öğretmen Çalışma Testi';
+}
+
+function assignmentFormatBadgeClass(item: StudentAssignment): string {
+  if (item.assignmentType === 'study') {
+    return 'border-sky-400/35 bg-sky-500/15 text-sky-100';
+  }
+  if (item.libraryExamFormat === 'full_mock') {
+    return 'border-amber-400/35 bg-amber-500/15 text-amber-100';
+  }
+  return 'border-fuchsia-400/35 bg-fuchsia-500/15 text-fuchsia-100';
 }
 
 function assignmentStatusLabel(status: string): string {
@@ -725,13 +743,9 @@ export function StudentPanel({
                     </td>
                     <td className="px-6 py-4">
                       <span
-                        className={`${tableBadge} ${
-                          item.assignmentType === 'exam'
-                            ? 'border-fuchsia-400/35 bg-fuchsia-500/15 text-fuchsia-100'
-                            : 'border-sky-400/35 bg-sky-500/15 text-sky-100'
-                        }`}
+                        className={`${tableBadge} ${assignmentFormatBadgeClass(item)}`}
                       >
-                        {assignmentTypeLabel(item.assignmentType)}
+                        {assignmentFormatLabel(item)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-300">
