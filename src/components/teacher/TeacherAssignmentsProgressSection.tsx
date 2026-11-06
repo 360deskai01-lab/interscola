@@ -42,9 +42,13 @@ interface TeacherAssignmentsProgressSectionProps {
 type StatusBucketFilter = 'all' | 'pending' | 'overdue' | 'completed';
 
 function statusBadge(status: string): ReactNode {
+  const pill =
+    'inline-flex rounded-md border px-2.5 py-1 text-xs font-medium';
   if (status === 'in_progress') {
     return (
-      <span className="inline-flex rounded-full border border-amber-400/40 bg-amber-500/20 px-2.5 py-0.5 text-xs font-medium text-amber-100">
+      <span
+        className={`${pill} border-amber-400/40 bg-amber-500/20 text-amber-100`}
+      >
         Devam Ediyor
       </span>
     );
@@ -52,14 +56,18 @@ function statusBadge(status: string): ReactNode {
 
   if (status === 'completed') {
     return (
-      <span className="inline-flex rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2.5 py-0.5 text-xs font-medium text-emerald-100">
+      <span
+        className={`${pill} border-emerald-400/40 bg-emerald-500/20 text-emerald-100`}
+      >
         Tamamlandı
       </span>
     );
   }
 
   return (
-    <span className="inline-flex rounded-full border border-slate-500/40 bg-slate-500/20 px-2.5 py-0.5 text-xs font-medium text-slate-300">
+    <span
+      className={`${pill} border-slate-500/40 bg-slate-500/20 text-slate-300`}
+    >
       Başlanmadı
     </span>
   );
@@ -75,7 +83,7 @@ function examResultBadge(
   const pct = Math.round(result.percentage);
 
   return (
-    <span className="inline-flex max-w-[220px] flex-wrap items-center gap-1 rounded-full border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-100">
+    <span className="inline-flex max-w-[220px] flex-wrap items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-100">
       <span aria-hidden>🎯</span>
       <span className="truncate">{result.scaledResult}</span>
       <span className="text-emerald-200/80">(%{pct})</span>
@@ -242,7 +250,7 @@ export function TeacherAssignmentsProgressSection({
                   key={pill.id}
                   type="button"
                   onClick={() => setStatusFilter(pill.id)}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition ${
                     statusFilter === pill.id
                       ? 'border-indigo-400/50 bg-indigo-500/25 text-indigo-50'
                       : 'border-white/10 bg-white/[0.04] text-slate-400 hover:border-white/20 hover:text-slate-200'
@@ -265,7 +273,7 @@ export function TeacherAssignmentsProgressSection({
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
+      <div className="overflow-x-auto rounded-3xl border border-white/10 bg-white/[0.03]">
         {rows.length === 0 ? (
           <div className="px-6 py-14 text-center">
             <ClipboardList className="mx-auto size-8 text-slate-700" />
@@ -282,16 +290,18 @@ export function TeacherAssignmentsProgressSection({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[750px] text-left text-sm">
               <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
-                  <th className="px-6 py-3 font-medium">Öğrenci</th>
-                  <th className="px-6 py-3 font-medium">Materyal</th>
-                  <th className="px-6 py-3 font-medium">Atama Tarihi</th>
-                  <th className="px-6 py-3 font-medium">Son Teslim</th>
-                  <th className="px-6 py-3 font-medium">Durum</th>
-                  <th className="px-6 py-3 font-medium">Sınav Notu / Sonuç</th>
-                  <th className="px-6 py-3 text-right font-medium">
+                  <th className="px-4 py-3 font-medium sm:px-6">Öğrenci</th>
+                  <th className="px-4 py-3 font-medium sm:px-6">Materyal</th>
+                  <th className="px-4 py-3 font-medium sm:px-6">Atama Tarihi</th>
+                  <th className="px-4 py-3 font-medium sm:px-6">Son Teslim</th>
+                  <th className="px-4 py-3 font-medium sm:px-6">Durum</th>
+                  <th className="px-4 py-3 font-medium sm:px-6">
+                    Sınav Notu / Sonuç
+                  </th>
+                  <th className="min-w-[110px] pr-4 pl-4 text-right font-medium sm:px-6">
                     İletişim
                   </th>
                 </tr>
@@ -309,14 +319,14 @@ export function TeacherAssignmentsProgressSection({
                       key={row.assignmentId}
                       className="transition hover:bg-white/[0.02]"
                     >
-                      <td className="px-6 py-4 font-medium text-slate-100">
+                      <td className="px-4 py-4 font-medium text-slate-100 sm:px-6">
                         {row.studentFullName}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 sm:px-6">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-slate-200">{row.materialTitle}</p>
                           {overdue ? (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/45 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-100">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-rose-400/45 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-100">
                               <span aria-hidden>⏱️</span>
                               Gecikti
                             </span>
@@ -326,17 +336,19 @@ export function TeacherAssignmentsProgressSection({
                           {row.curriculum}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-slate-400">
+                      <td className="px-4 py-4 text-slate-400 sm:px-6">
                         {formatDate(row.assignedAt)}
                       </td>
-                      <td className="px-6 py-4 text-slate-400">
+                      <td className="px-4 py-4 text-slate-400 sm:px-6">
                         {row.dueDate ? formatDateTime(row.dueDate) : '—'}
                       </td>
-                      <td className="px-6 py-4">{statusBadge(row.status)}</td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 sm:px-6">
+                        {statusBadge(row.status)}
+                      </td>
+                      <td className="px-4 py-4 sm:px-6">
                         {examResultBadge(row.examResult)}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="min-w-[110px] px-4 py-4 pr-4 text-right sm:px-6 sm:pr-4">
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           {showRemind ? (
                             <button

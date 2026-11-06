@@ -5,9 +5,9 @@ import { useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
   BookOpen,
+  Calendar,
   CheckCircle2,
   Loader2,
-  Send,
 } from 'lucide-react';
 import type { LibraryItem } from '@/app/teacher/library-actions';
 import type { TeacherStudent } from '@/app/teacher/actions';
@@ -327,106 +327,123 @@ export function TeacherLibrarySection({
         ) : (
           <ul className="divide-y divide-white/5">
             {items.map((item) => (
-              <li
-                key={item.id}
-                className="flex flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-100">{item.title}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-violet-400/30 bg-violet-500/15 px-2.5 py-0.5 text-xs font-medium text-violet-200">
+              <li key={item.id} className="flex flex-col">
+                <div className="w-full px-6 pt-4 pb-3">
+                  <h3 className="w-full break-words text-[15px] font-semibold leading-snug text-slate-100">
+                    {item.title}
+                  </h3>
+                  <div className="mt-2.5 flex min-h-[1.5rem] flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+                    <span className="inline-flex items-center rounded-md border border-violet-400/35 bg-violet-500/12 px-2 py-0.5 font-medium text-violet-200">
                       {curriculumLabel(item.curriculum)}
                     </span>
-                    <span className="text-xs text-slate-500">
+                    <span className="inline-flex items-center text-slate-500">
                       {formatDate(item.createdAt)}
                     </span>
+                    {item.extractedText ? (
+                      <span className="line-clamp-1 min-w-0 max-w-full flex-1 basis-[min(100%,12rem)] text-slate-500">
+                        {item.extractedText.trim()}
+                      </span>
+                    ) : (
+                      <span className="text-slate-600">Özet yok</span>
+                    )}
                   </div>
-                  {item.extractedText ? (
-                    <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-slate-500">
-                      {item.extractedText}
-                    </p>
-                  ) : null}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                  <button
-                    type="button"
-                    disabled={
-                      generatePending && generatingLibraryId === item.id
-                    }
-                    onClick={() => handleGenerateExam(item)}
-                    className="flex items-center gap-1.5 rounded-xl border-2 border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-violet-900/30 transition hover:brightness-110 disabled:opacity-60"
-                  >
-                    {generatePending && generatingLibraryId === item.id ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <span aria-hidden>✨</span>
-                    )}
-                    Bu Materyalden Sınav Üret
-                  </button>
+                <div className="border-t border-white/5 px-6 py-4">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1 space-y-3 lg:max-w-md">
+                      {students.length === 0 ? (
+                        <p className="text-xs text-slate-600">
+                          Atama için önce öğrenci bağla
+                        </p>
+                      ) : (
+                        <>
+                          <select
+                            value={assignDrafts[item.id]?.studentId ?? ''}
+                            onChange={(e) =>
+                              patchAssignDraft(item.id, {
+                                studentId: e.target.value,
+                              })
+                            }
+                            disabled={pending && assigningLibraryId === item.id}
+                            className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-indigo-400/50 sm:w-64"
+                            aria-label={`${item.title} için öğrenci seç`}
+                          >
+                            <option value="" disabled>
+                              Öğrenci seç…
+                            </option>
+                            {students.map((student) => (
+                              <option
+                                key={student.studentId}
+                                value={student.studentId}
+                              >
+                                {student.fullName}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="block text-[11px] font-medium text-slate-500">
+                            Son Teslim Tarihi ve Saati (opsiyonel)
+                            <span className="relative mt-1.5 block">
+                              <Calendar className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+                              <input
+                                type="datetime-local"
+                                value={assignDrafts[item.id]?.dueLocal ?? ''}
+                                onChange={(e) =>
+                                  patchAssignDraft(item.id, {
+                                    dueLocal: e.target.value,
+                                  })
+                                }
+                                disabled={
+                                  pending && assigningLibraryId === item.id
+                                }
+                                className="w-full rounded-xl border border-white/10 bg-slate-950/70 py-2.5 pr-3 pl-10 text-sm text-slate-100 outline-none focus:border-indigo-400/45 [color-scheme:dark]"
+                              />
+                            </span>
+                          </label>
+                        </>
+                      )}
+                    </div>
 
-                  {students.length === 0 ? (
-                    <span className="text-xs text-slate-600">
-                      Atama için önce öğrenci bağla
-                    </span>
-                  ) : (
-                    <>
-                      <select
-                        value={assignDrafts[item.id]?.studentId ?? ''}
-                        onChange={(e) =>
-                          patchAssignDraft(item.id, {
-                            studentId: e.target.value,
-                          })
-                        }
-                        disabled={pending && assigningLibraryId === item.id}
-                        className="min-w-[160px] rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-indigo-400/50"
-                        aria-label={`${item.title} için öğrenci seç`}
-                      >
-                        <option value="" disabled>
-                          Öğrenci seç…
-                        </option>
-                        {students.map((student) => (
-                          <option key={student.studentId} value={student.studentId}>
-                            {student.fullName}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="flex min-w-[200px] flex-col text-[10px] font-medium text-slate-500">
-                        Son teslim (opsiyonel)
-                        <input
-                          type="datetime-local"
-                          value={assignDrafts[item.id]?.dueLocal ?? ''}
-                          onChange={(e) =>
-                            patchAssignDraft(item.id, {
-                              dueLocal: e.target.value,
-                            })
-                          }
-                          disabled={pending && assigningLibraryId === item.id}
-                          className="mt-1 rounded-xl border border-white/10 bg-slate-950/60 px-2 py-2 text-xs text-slate-100 outline-none focus:border-indigo-400/45"
-                        />
-                      </label>
+                    <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                       <button
                         type="button"
-                        disabled={pending && assigningLibraryId === item.id}
-                        onClick={() => {
-                          const draft = assignDrafts[item.id];
-                          handleAssign(
-                            item.id,
-                            draft?.studentId ?? '',
-                            draft?.dueLocal ?? '',
-                          );
-                        }}
-                        className="flex items-center gap-1.5 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-3.5 py-2 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:opacity-50"
+                        disabled={
+                          generatePending && generatingLibraryId === item.id
+                        }
+                        onClick={() => handleGenerateExam(item)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-violet-400/60 bg-gradient-to-r from-violet-600 to-fuchsia-600 px-3.5 py-2.5 text-xs font-semibold text-white shadow-lg shadow-violet-900/30 transition hover:brightness-110 disabled:opacity-60"
                       >
-                        {pending && assigningLibraryId === item.id ? (
+                        {generatePending && generatingLibraryId === item.id ? (
                           <Loader2 className="size-3.5 animate-spin" />
                         ) : (
-                          <Send className="size-3.5" />
+                          <span aria-hidden>✨</span>
                         )}
-                        Çalışma Olarak Ata
+                        Bu Materyalden Sınav Üret
                       </button>
-                    </>
-                  )}
+                      {students.length > 0 ? (
+                        <button
+                          type="button"
+                          disabled={pending && assigningLibraryId === item.id}
+                          onClick={() => {
+                            const draft = assignDrafts[item.id];
+                            handleAssign(
+                              item.id,
+                              draft?.studentId ?? '',
+                              draft?.dueLocal ?? '',
+                            );
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-3.5 py-2.5 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:opacity-50"
+                        >
+                          {pending && assigningLibraryId === item.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <span aria-hidden>🚀</span>
+                          )}
+                          Çalışma Olarak Ata
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </li>
             ))}
