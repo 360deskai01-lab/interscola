@@ -10,7 +10,8 @@
     "db:seed": "tsx scripts/seed-exams.ts",
     "audit:hard": "tsx scripts/audit-hard-v2.ts",
     "audit:hard:360": "tsx scripts/audit-hard-360.ts",
-    "audit:hard:v3": "tsx scripts/audit-hard-v3.ts"
+    "audit:hard:v3": "tsx scripts/audit-hard-v3.ts",
+    "audit:hard:v4": "tsx scripts/audit-hard-v4.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
