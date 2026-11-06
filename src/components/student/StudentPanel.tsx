@@ -62,6 +62,8 @@ import {
 } from '@/lib/student-dashboard/dashboard-tabs';
 import { computeAssignmentSidebarDot } from '@/lib/student-dashboard/assignment-dots';
 import type { LibraryExamFormat } from '@/lib/exam/library-exam-format';
+import { ExamRadarWidget } from '@/components/student/ExamRadarWidget';
+import type { OfficialExamRadarData } from '@/types/exam-radar';
 
 interface ConnectClaimResult {
   success: boolean;
@@ -138,6 +140,7 @@ interface StudentPanelProps {
   onSaveStudentActivities: (
     data: ActivityPassportData,
   ) => Promise<{ success: boolean; error?: string; data?: ActivityPassportData }>;
+  examRadar: OfficialExamRadarData;
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -235,6 +238,7 @@ export function StudentPanel({
   onSaveStudentTranscript,
   activityPassport,
   onSaveStudentActivities,
+  examRadar,
 }: StudentPanelProps): ReactNode {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -540,6 +544,7 @@ export function StudentPanel({
 
           {activeTab === 'cockpit' ? (
             <>
+              <ExamRadarWidget initialData={examRadar} />
               <StudentPerformanceOverviewSection analytics={analytics} />
               <StudentCareerAcademicCockpit
                 data={commandCenter}

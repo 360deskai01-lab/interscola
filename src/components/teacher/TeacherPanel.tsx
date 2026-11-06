@@ -58,6 +58,8 @@ import {
 } from '@/components/teacher/TeacherStudentCareerInsightModal';
 import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/teacher-career-insight';
 import type { TeacherDashboardTab } from '@/lib/teacher-dashboard/dashboard-tabs';
+import { TeacherExamRadarChip } from '@/components/teacher/TeacherExamRadarChip';
+import type { OfficialExamScheduleSummary } from '@/types/exam-radar';
 
 interface TeacherPanelProps {
   activeTab: TeacherDashboardTab;
@@ -162,6 +164,7 @@ interface TeacherPanelProps {
     assignmentVolume: number;
   };
   panelDataError: string | null;
+  nearestOfficialExam: OfficialExamScheduleSummary | null;
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -246,6 +249,7 @@ export function TeacherPanel({
   onLoadStudentCareerInsight,
   stats,
   panelDataError,
+  nearestOfficialExam,
 }: TeacherPanelProps): ReactNode {
   const router = useRouter();
   const [studentMessageTarget, setStudentMessageTarget] =
@@ -367,7 +371,8 @@ export function TeacherPanel({
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
-              <h2 className="text-sm font-medium text-slate-200">
+              <TeacherExamRadarChip exam={nearestOfficialExam} />
+              <h2 className="mt-4 text-sm font-medium text-slate-200">
                 Hoş geldin, öğretmen
               </h2>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">

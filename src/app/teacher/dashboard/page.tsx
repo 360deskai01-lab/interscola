@@ -35,6 +35,7 @@ import {
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { TeacherDashboardShell } from '@/components/teacher/TeacherDashboardShell';
 import { UNREAD_GENERAL_AGGREGATE_KEY } from '@/lib/message-unread-scopes';
+import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
 
 export const instant = false;
 
@@ -99,6 +100,7 @@ export default async function TeacherDashboardPage({
     : null;
 
   const unreadByAssignment = unreadCounts;
+  const examRadar = await getOfficialExamRadarAction();
   let unreadMessageTotal = 0;
   for (const [key, count] of Object.entries(unreadByAssignment)) {
     if (key === UNREAD_GENERAL_AGGREGATE_KEY) continue;
@@ -190,6 +192,7 @@ export default async function TeacherDashboardPage({
             assignmentVolume,
           }}
           panelDataError={panelDataError}
+          nearestOfficialExam={examRadar.nearestExam}
         />
 
         <p className="mt-8 text-center text-xs text-slate-600">

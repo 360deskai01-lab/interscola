@@ -20,6 +20,7 @@ import { parseTeacherDashboardTab } from '@/lib/teacher-dashboard/dashboard-tabs
 import { TeacherPanel } from '@/components/teacher/TeacherPanel';
 import type { FacultyColleague } from '@/app/teacher/faculty-actions';
 import type { WeeklyDigestRow } from '@/app/teacher/digest-actions';
+import type { OfficialExamScheduleSummary } from '@/types/exam-radar';
 
 export interface TeacherDashboardShellProps {
   profileEmail: string;
@@ -123,6 +124,7 @@ export interface TeacherDashboardShellProps {
     assignmentVolume: number;
   };
   panelDataError: string | null;
+  nearestOfficialExam: OfficialExamScheduleSummary | null;
 }
 
 function TeacherDashboardShellInner(props: TeacherDashboardShellProps): ReactNode {

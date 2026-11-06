@@ -32,6 +32,8 @@ import {
   startSelfPacedFullMockFormAction,
   startSmartDiagnosticSelfPacedExamFormAction,
 } from '@/app/student/public-library-actions';
+import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
+import type { OfficialExamRadarData } from '@/types/exam-radar';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { ClaimGuestCareerAssessmentBridge } from '@/components/student/ClaimGuestCareerAssessmentBridge';
 import { StudentPanel } from '@/components/student/StudentPanel';
@@ -88,6 +90,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     commandCenterResult,
     transcriptResult,
     portfolioResult,
+    examRadarData,
   ] = await Promise.all([
     getStudentTeachersAction(),
     getStudentAssignmentsAction(),
@@ -98,7 +101,10 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     getStudentCommandCenterDataAction(),
     getStudentTranscriptAction(),
     getStudentActivitiesAction(),
+    getOfficialExamRadarAction(),
   ]);
+
+  const examRadar: OfficialExamRadarData = examRadarData;
 
   const teachers = teachersResult.teachers ?? [];
   const assignments = assignmentsResult.assignments ?? [];
@@ -268,6 +274,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             onSaveStudentTranscript={saveStudentTranscriptAction}
             activityPassport={activityPassport}
             onSaveStudentActivities={saveStudentActivitiesAction}
+            examRadar={examRadar}
           />
         </Suspense>
 
