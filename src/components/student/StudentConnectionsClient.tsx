@@ -37,6 +37,7 @@ import { StudentHubNav } from '@/components/student/StudentHubNav';
 interface StudentConnectionsClientProps {
   teachers: LinkedTeacher[];
   organization: StudentOrganizationLink | null;
+  /** Boş: henüz atanmamış token; "Yenile" ile üretilebilir. */
   observerToken: string;
 }
 
@@ -56,10 +57,11 @@ export function StudentConnectionsClient({
   const [joinPending, startJoin] = useTransition();
   const [rotatePending, startRotate] = useTransition();
 
-  const observerUrl = useMemo(
-    () => absoluteUrl(`/observe/${observerToken}`),
-    [observerToken],
-  );
+  const observerUrl = useMemo(() => {
+    const t = observerToken.trim();
+    if (!t) return '';
+    return absoluteUrl(`/observe/${t}`);
+  }, [observerToken]);
 
   async function copyText(label: string, text: string) {
     try {
@@ -318,15 +320,23 @@ export function StudentConnectionsClient({
                 Bu bağlantıyı güvenilir bir veli veya gözlemci ile paylaş.
                 Yenilediğinde eski bağlantı geçersiz olur.
               </p>
+              {!observerUrl ? (
+                <p className="mt-3 text-xs text-amber-200/90">
+                  Gözlemci bağlantın henüz oluşturulmadı. Aşağıdaki
+                  &quot;Yenile&quot; ile güvenli bir link üretebilirsin.
+                </p>
+              ) : null}
               <div className="mt-4 flex flex-col gap-2 sm:flex-row">
                 <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 font-mono text-xs text-slate-300 break-all">
-                  {observerUrl}
+                  {observerUrl ||
+                    'Bağlantı oluşturulunca burada görünecek.'}
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     onClick={() => copyText('obs', observerUrl)}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-xs text-slate-200 transition hover:bg-white/[0.1]"
+                    disabled={!observerUrl}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-xs text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Copy className="size-3.5" />
                     {copiedKey === 'obs' ? 'Kopyalandı' : 'Kopyala'}

@@ -393,6 +393,7 @@ export interface StudentAcademicProfileRow {
   externalPortfolioUrl: string | null;
   instagramHandle: string | null;
   alumniNetworkOptIn: boolean;
+  /** Boş string: token henüz atanmamış; form kaydı veya "Yenile" ile oluşturulur. */
   observerToken: string;
   publicPortfolioSlug: string | null;
   legacyFullName: string | null;
@@ -507,24 +508,25 @@ export async function getStudentAcademicProfileAction(): Promise<{
       public_portfolio_slug: string | null;
     } | null;
 
-    if (!row?.observer_link_token) {
-      return { success: false, error: 'Gözlemci bağlantısı oluşturulamadı.' };
-    }
+    const observerToken =
+      row?.observer_link_token != null && String(row.observer_link_token).trim() !== ''
+        ? String(row.observer_link_token).trim()
+        : '';
 
     return {
       success: true,
       data: {
-        legacyFullName: row.full_name,
-        firstName: row.first_name,
-        lastName: row.last_name,
-        highSchoolName: row.high_school_name,
-        graduationYear: row.graduation_year,
-        linkedinUrl: row.linkedin_url,
-        externalPortfolioUrl: row.external_portfolio_url,
-        instagramHandle: row.instagram_handle,
-        alumniNetworkOptIn: row.alumni_network_opt_in ?? false,
-        observerToken: row.observer_link_token,
-        publicPortfolioSlug: row.public_portfolio_slug,
+        legacyFullName: row?.full_name ?? null,
+        firstName: row?.first_name ?? null,
+        lastName: row?.last_name ?? null,
+        highSchoolName: row?.high_school_name ?? null,
+        graduationYear: row?.graduation_year ?? null,
+        linkedinUrl: row?.linkedin_url ?? null,
+        externalPortfolioUrl: row?.external_portfolio_url ?? null,
+        instagramHandle: row?.instagram_handle ?? null,
+        alumniNetworkOptIn: row?.alumni_network_opt_in ?? false,
+        observerToken,
+        publicPortfolioSlug: row?.public_portfolio_slug ?? null,
       },
     };
   } catch (error) {
