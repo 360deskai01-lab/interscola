@@ -22,6 +22,7 @@ import {
 } from '@/lib/exam/exam-session-formats';
 import {
   exploreModeForFormat,
+  type LibraryExamFormat,
   type LibraryExploreMode,
 } from '@/lib/exam/library-exam-format';
 import { isLibraryRecentlyAdded } from '@/lib/public-library/library-new-badge';
@@ -40,6 +41,34 @@ const MODE_OPTIONS: {
 
 function isCurriculumCode(value: string): value is CurriculumCode {
   return value === 'SAT' || value === 'IELTS' || value === 'CAIE';
+}
+
+/** DB başlığı aynı kalır; yanlış "tam deneme" iması veren metinleri yalnızca quick sekmede düzeltir. */
+function titleImpliesStockFullMockPool(raw: string): boolean {
+  const n = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (n.includes('hazır tam deneme havuzu')) return true;
+  if (n.includes('tam deneme')) return true;
+  return false;
+}
+
+/** Hızlı Pratikler sekmesinde drill / mini_mock kartları için görünen başlık. */
+function displayLibraryCardTitle(
+  item: PublicLibraryItem,
+  listMode: LibraryExploreMode,
+): string {
+  if (listMode === 'full') {
+    return item.title;
+  }
+  const fmt: LibraryExamFormat = item.examFormat;
+  if (fmt !== 'drill' && fmt !== 'mini_mock') {
+    return item.title;
+  }
+  if (!titleImpliesStockFullMockPool(item.title)) {
+    return item.title;
+  }
+  return fmt === 'mini_mock'
+    ? '⏱️ Modüler Mini Deneme'
+    : '🎯 Hızlı Çalışma Pratiği';
 }
 
 /** Oturum başlarken uygulanan soru sayısı; hazır payload daha kısaysa onunla sınırlı. */
@@ -297,7 +326,9 @@ export function StudentExploreSection({
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-medium text-slate-100">{item.title}</h3>
+                  <h3 className="font-medium text-slate-100">
+                    {displayLibraryCardTitle(item, mode)}
+                  </h3>
                   {isLibraryRecentlyAdded(item.createdAt) ? (
                     <LibraryNewBadge className="shrink-0" />
                   ) : null}
