@@ -21,6 +21,7 @@ interface LibraryExamPreviewModalProps {
     libraryId: string,
     studentId: string,
     examPayload: AssessmentPayload,
+    dueDate?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
 }
 
@@ -59,8 +60,17 @@ export function LibraryExamPreviewModal({
   const [pending, startTransition] = useTransition();
   const [assignError, setAssignError] = useState<string | null>(null);
   const [studentId, setStudentId] = useState('');
+  const [dueLocal, setDueLocal] = useState('');
 
   if (!exam || !libraryId) return null;
+
+  function dueLocalToIsoOrNull(raw: string): string | null {
+    const t = raw.trim();
+    if (!t) return null;
+    const d = new Date(t);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
 
   function handleAssign() {
     if (!libraryId || !exam) return;
@@ -76,6 +86,7 @@ export function LibraryExamPreviewModal({
         libraryId,
         studentId,
         exam,
+        dueLocalToIsoOrNull(dueLocal),
       );
       if (!result.success) {
         setAssignError(result.error ?? 'Atama yapılamadı.');
@@ -197,7 +208,7 @@ export function LibraryExamPreviewModal({
               Atama için önce öğrenci bağlantısı kurmalısın.
             </p>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
               <select
                 value={studentId}
                 onChange={(event) => setStudentId(event.target.value)}
@@ -212,6 +223,16 @@ export function LibraryExamPreviewModal({
                   </option>
                 ))}
               </select>
+              <label className="flex min-w-[200px] flex-1 flex-col text-[10px] font-medium text-slate-500">
+                Son teslim (opsiyonel)
+                <input
+                  type="datetime-local"
+                  value={dueLocal}
+                  onChange={(e) => setDueLocal(e.target.value)}
+                  disabled={pending}
+                  className="mt-1 rounded-xl border border-white/10 bg-slate-950/60 px-2 py-2 text-xs text-slate-100 outline-none focus:border-violet-400/45"
+                />
+              </label>
               <button
                 type="button"
                 onClick={handleAssign}

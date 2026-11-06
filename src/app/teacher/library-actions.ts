@@ -12,6 +12,7 @@ import {
   hasStoredExamPayload,
   parseAssessmentPayload,
 } from '@/lib/assessment-payload';
+import { sendMessageAction } from '@/app/messages/actions';
 import { getCurrentProfile, type ProfileRecord } from '@/lib/auth';
 import { ATTEMPTS_TABLE, getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -56,6 +57,37 @@ const MIN_EXTRACTED_TEXT_CHARS = 40;
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * İstemciden gelen ISO veya datetime yerel dizesini UTC `timestamptz` için doğrular.
+ */
+function parseOptionalDueDate(
+  raw: string | null | undefined,
+): string | null {
+  if (raw == null) return null;
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  if (!t) return null;
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+async function insertAssignmentWithOptionalDueDate(
+  client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
+  basePayload: Record<string, unknown>,
+  dueIso: string | null,
+): Promise<{ error: { code?: string; message: string } | null }> {
+  const payload =
+    dueIso !== null
+      ? { ...basePayload, due_date: dueIso }
+      : basePayload;
+  let { error } = await client.from('assignments').insert(payload);
+  if (error?.code === '42703' && dueIso !== null) {
+    const retry = await client.from('assignments').insert(basePayload);
+    error = retry.error;
+  }
+  return { error: error ?? null };
+}
 
 const LIBRARY_EXAM_MODE: Record<
   CurriculumCode,
@@ -269,6 +301,7 @@ export type AssignmentType = 'study' | 'exam';
 export async function assignStudyMaterialAction(
   libraryId: string,
   studentId: string,
+  dueDate?: string | null,
 ): Promise<LibraryActionResult> {
   try {
     const teacher = await requireApprovedTeacher();
@@ -286,6 +319,8 @@ export async function assignStudyMaterialAction(
     if (typeof studentId !== 'string' || studentId.trim().length === 0) {
       return { success: false, error: 'Lütfen bir öğrenci seç.' };
     }
+
+    const dueIso = parseOptionalDueDate(dueDate);
 
     const client = await getProfilesClient();
     if (!client) {
@@ -349,13 +384,17 @@ export async function assignStudyMaterialAction(
       return { success: false, error: duplicateMessage };
     }
 
-    const { error: insertError } = await client.from('assignments').insert({
-      library_id: libraryId,
-      teacher_id: teacher.id,
-      student_id: studentId,
-      status: 'assigned',
-      assignment_type: 'study',
-    });
+    const { error: insertError } = await insertAssignmentWithOptionalDueDate(
+      client,
+      {
+        library_id: libraryId,
+        teacher_id: teacher.id,
+        student_id: studentId,
+        status: 'assigned',
+        assignment_type: 'study',
+      },
+      dueIso,
+    );
 
     if (insertError) {
       if (insertError.code === '23505') {
@@ -382,8 +421,9 @@ export async function assignStudyMaterialAction(
 export async function assignMaterialAction(
   libraryId: string,
   studentId: string,
+  dueDate?: string | null,
 ): Promise<LibraryActionResult> {
-  return assignStudyMaterialAction(libraryId, studentId);
+  return assignStudyMaterialAction(libraryId, studentId, dueDate);
 }
 
 function mapGenerateExamFailure(error: unknown): string {
@@ -537,6 +577,7 @@ export async function assignGeneratedExamAction(
   libraryId: string,
   studentId: string,
   examPayload: AssessmentPayload,
+  dueDate?: string | null,
 ): Promise<LibraryActionResult> {
   try {
     const teacher = await requireApprovedTeacher();
@@ -554,6 +595,8 @@ export async function assignGeneratedExamAction(
     if (!UUID_PATTERN.test(studentId)) {
       return { success: false, error: 'Geçersiz öğrenci kimliği.' };
     }
+
+    const dueIso = parseOptionalDueDate(dueDate);
 
     let validatedExam: AssessmentPayload;
     try {
@@ -620,14 +663,18 @@ export async function assignGeneratedExamAction(
       return { success: false, error: duplicateMessage };
     }
 
-    const { error: insertError } = await client.from('assignments').insert({
-      library_id: libraryId,
-      teacher_id: teacher.id,
-      student_id: studentId,
-      status: 'assigned',
-      assignment_type: 'exam',
-      exam_payload: validatedExam,
-    });
+    const { error: insertError } = await insertAssignmentWithOptionalDueDate(
+      client,
+      {
+        library_id: libraryId,
+        teacher_id: teacher.id,
+        student_id: studentId,
+        status: 'assigned',
+        assignment_type: 'exam',
+        exam_payload: validatedExam,
+      },
+      dueIso,
+    );
 
     if (insertError) {
       if (insertError.code === '23505') {
@@ -674,6 +721,8 @@ export interface TeacherAssignmentProgressRow {
   assignmentType: AssignmentType;
   status: AssignmentWorkflowStatus;
   assignedAt: string;
+  /** Son teslim (UTC ISO); migration veya sütun yoksa null. */
+  dueDate: string | null;
   /** Atama sınavı tamamlandıysa en güncel deneme sonucu. */
   examResult: TeacherAssignmentExamResult | null;
 }
@@ -698,13 +747,29 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
-    const { data: rows, error: assignError } = await client
+    type ProgressRow = {
+      id: string;
+      status: string;
+      created_at: string;
+      due_date: string | null;
+      student_id: string;
+      assignment_type: string | null;
+      exam_payload: unknown;
+      libraries:
+        | { title: string; curriculum: string }
+        | { title: string; curriculum: string }[]
+        | null;
+    };
+
+    let rows: ProgressRow[] | null = null;
+    let { data: rowsRaw, error: assignError } = await client
       .from('assignments')
       .select(
         `
         id,
         status,
         created_at,
+        due_date,
         student_id,
         assignment_type,
         exam_payload,
@@ -716,6 +781,32 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       )
       .eq('teacher_id', teacher.id)
       .order('created_at', { ascending: false });
+    rows = (rowsRaw ?? []) as ProgressRow[];
+
+    if (assignError?.code === '42703') {
+      const fallback = await client
+        .from('assignments')
+        .select(
+          `
+        id,
+        status,
+        created_at,
+        student_id,
+        assignment_type,
+        exam_payload,
+        libraries (
+          title,
+          curriculum
+        )
+      `,
+        )
+        .eq('teacher_id', teacher.id)
+        .order('created_at', { ascending: false });
+      rows = ((fallback.data ?? []) as Omit<ProgressRow, 'due_date'>[]).map(
+        (r) => ({ ...r, due_date: null }),
+      );
+      assignError = fallback.error;
+    }
 
     if (assignError) {
       console.error(
@@ -725,20 +816,7 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       return { success: false, error: 'Ödev listesi okunamadı.' };
     }
 
-    type ProgressRow = {
-      id: string;
-      status: string;
-      created_at: string;
-      student_id: string;
-      assignment_type: string | null;
-      exam_payload: unknown;
-      libraries:
-        | { title: string; curriculum: string }
-        | { title: string; curriculum: string }[]
-        | null;
-    };
-
-    const assignmentRows = (rows ?? []) as ProgressRow[];
+    const assignmentRows = rows ?? [];
 
     const studentIds = [
       ...new Set(
@@ -854,6 +932,10 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
         assignmentType,
         status: row.status,
         assignedAt: row.created_at,
+        dueDate:
+          typeof row.due_date === 'string' && row.due_date.trim()
+            ? row.due_date
+            : null,
         examResult:
           assignmentType === 'exam'
             ? (latestAttemptByAssignment.get(row.id) ?? null)
@@ -868,6 +950,126 @@ export async function getTeacherAssignmentsProgressAction(): Promise<
       error instanceof Error ? error.message : String(error),
     );
     return { success: false, error: 'Ödev ilerlemesi yüklenemedi.' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hatırlatma (geciken ödev)
+// ---------------------------------------------------------------------------
+
+export async function sendAssignmentOverdueReminderAction(
+  assignmentId: string,
+  materialTitle: string,
+): Promise<LibraryActionResult> {
+  try {
+    const teacher = await requireApprovedTeacher();
+    if (!teacher) {
+      return {
+        success: false,
+        error: 'Bu işlem için onaylı bir öğretmen hesabı gerekiyor.',
+      };
+    }
+
+    if (!UUID_PATTERN.test(assignmentId)) {
+      return { success: false, error: 'Geçersiz atama kimliği.' };
+    }
+
+    const title = materialTitle.trim() || 'Ödev';
+
+    const client = await getProfilesClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    type ReminderAssignmentRow = {
+      teacher_id: string;
+      student_id: string;
+      status: string;
+      due_date?: string | null;
+    };
+
+    let hasDueColumn = true;
+    let row: ReminderAssignmentRow | null = null;
+    let { data: rowData, error: readError } = await client
+      .from('assignments')
+      .select('id, teacher_id, student_id, status, due_date')
+      .eq('id', assignmentId)
+      .maybeSingle();
+    row = rowData as ReminderAssignmentRow | null;
+
+    if (readError?.code === '42703') {
+      hasDueColumn = false;
+      const fb = await client
+        .from('assignments')
+        .select('id, teacher_id, student_id, status')
+        .eq('id', assignmentId)
+        .maybeSingle();
+      row = fb.data as ReminderAssignmentRow | null;
+      readError = fb.error;
+    }
+
+    if (readError || !row) {
+      console.error(
+        '[library] Hatırlatma için atama okunamadı:',
+        readError?.message,
+      );
+      return { success: false, error: 'Atama bulunamadı.' };
+    }
+
+    const r = row!;
+
+    if (!hasDueColumn) {
+      return {
+        success: false,
+        error:
+          'Hatırlatma için veritabanında due_date sütunu gerekir (migration bekleniyor).',
+      };
+    }
+
+    if (r.teacher_id !== teacher.id) {
+      return { success: false, error: 'Bu atama size ait değil.' };
+    }
+
+    if (r.status === 'completed') {
+      return { success: false, error: 'Bu ödev zaten tamamlandı.' };
+    }
+
+    if (
+      r.due_date === null ||
+      r.due_date === undefined ||
+      !String(r.due_date).trim()
+    ) {
+      return {
+        success: false,
+        error: 'Bu ödev için son teslim tarihi tanımlı değil.',
+      };
+    }
+
+    const dueTime = new Date(String(r.due_date)).getTime();
+    if (Number.isNaN(dueTime) || dueTime >= Date.now()) {
+      return {
+        success: false,
+        error: 'Hatırlatma yalnızca süresi dolmuş ödevler için geçerlidir.',
+      };
+    }
+
+    const body = `${title} başlıklı ödevinizin teslim süresi dolmuştur, lütfen tamamlayınız.`;
+    const sent = await sendMessageAction(r.student_id, body);
+
+    if (!sent.success) {
+      return { success: false, error: sent.error ?? 'Mesaj gönderilemedi.' };
+    }
+
+    revalidatePath('/teacher/dashboard');
+    revalidatePath('/student/dashboard');
+
+    return { success: true };
+  } catch (error) {
+    console.error(
+      '[library] sendAssignmentOverdueReminderAction hatası:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Beklenmeyen bir hata oluştu.' };
   }
 }
 
@@ -888,16 +1090,26 @@ export async function createLibraryFormAction(input: {
 export async function assignMaterialFormAction(
   libraryId: string,
   studentId: string,
+  dueDate?: string | null,
 ): Promise<{ success: boolean; error?: string }> {
-  const result = await assignStudyMaterialAction(libraryId, studentId);
+  const result = await assignStudyMaterialAction(
+    libraryId,
+    studentId,
+    dueDate,
+  );
   return { success: result.success, error: result.error };
 }
 
 export async function assignStudyMaterialFormAction(
   libraryId: string,
   studentId: string,
+  dueDate?: string | null,
 ): Promise<{ success: boolean; error?: string }> {
-  const result = await assignStudyMaterialAction(libraryId, studentId);
+  const result = await assignStudyMaterialAction(
+    libraryId,
+    studentId,
+    dueDate,
+  );
   return { success: result.success, error: result.error };
 }
 
@@ -921,11 +1133,24 @@ export async function assignGeneratedExamFormAction(
   libraryId: string,
   studentId: string,
   examPayload: AssessmentPayload,
+  dueDate?: string | null,
 ): Promise<{ success: boolean; error?: string }> {
   const result = await assignGeneratedExamAction(
     libraryId,
     studentId,
     examPayload,
+    dueDate,
+  );
+  return { success: result.success, error: result.error };
+}
+
+export async function sendAssignmentOverdueReminderFormAction(
+  assignmentId: string,
+  materialTitle: string,
+): Promise<{ success: boolean; error?: string }> {
+  const result = await sendAssignmentOverdueReminderAction(
+    assignmentId,
+    materialTitle,
   );
   return { success: result.success, error: result.error };
 }

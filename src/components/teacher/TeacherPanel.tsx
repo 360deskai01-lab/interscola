@@ -75,11 +75,13 @@ interface TeacherPanelProps {
   onAssignMaterial: (
     libraryId: string,
     studentId: string,
+    dueDate?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   onAssignGeneratedExam: (
     libraryId: string,
     studentId: string,
     examPayload: AssessmentPayload,
+    dueDate?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   onGenerateExamFromLibrary: (
     libraryId: string,

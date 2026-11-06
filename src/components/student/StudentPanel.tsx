@@ -60,6 +60,7 @@ import {
   studentDashboardTabToSearchParam,
   type StudentDashboardTab,
 } from '@/lib/student-dashboard/dashboard-tabs';
+import { computeAssignmentSidebarDot } from '@/lib/student-dashboard/assignment-dots';
 
 interface ConnectClaimResult {
   success: boolean;
@@ -276,6 +277,11 @@ export function StudentPanel({
     [unreadByAssignment],
   );
 
+  const assignmentAlertDot = useMemo(
+    () => computeAssignmentSidebarDot(localAssignments),
+    [localAssignments],
+  );
+
   const filteredAssignments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return localAssignments;
@@ -477,6 +483,7 @@ export function StudentPanel({
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           unreadMessageTotal={unreadMessageTotal}
+          assignmentAlertDot={assignmentAlertDot}
         />
 
         <div className="min-w-0 flex-1 space-y-6">

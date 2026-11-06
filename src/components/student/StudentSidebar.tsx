@@ -5,6 +5,7 @@ import { Search } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { StudentDashboardTab } from '@/lib/student-dashboard/dashboard-tabs';
+import type { AssignmentSidebarDot } from '@/lib/student-dashboard/assignment-dots';
 
 export interface StudentSidebarNavItem {
   id: StudentDashboardTab;
@@ -38,6 +39,7 @@ interface StudentSidebarProps {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
   unreadMessageTotal: number;
+  assignmentAlertDot: AssignmentSidebarDot;
 }
 
 export function StudentSidebar({
@@ -46,12 +48,14 @@ export function StudentSidebar({
   searchQuery,
   onSearchQueryChange,
   unreadMessageTotal,
+  assignmentAlertDot,
 }: StudentSidebarProps): ReactNode {
-  const items = NAV_ITEMS.map((item) =>
-    item.id === 'messages'
-      ? { ...item, unreadCount: unreadMessageTotal }
-      : item,
-  );
+  const items = NAV_ITEMS.map((item) => {
+    if (item.id === 'messages') {
+      return { ...item, unreadCount: unreadMessageTotal };
+    }
+    return item;
+  });
 
   return (
     <aside className="lg:sticky lg:top-24 lg:w-72 lg:shrink-0">
@@ -73,6 +77,8 @@ export function StudentSidebar({
         >
           {items.map((item) => {
             const isActive = activeTab === item.id;
+            const showAssignDot =
+              item.id === 'assignments' && assignmentAlertDot !== 'none';
             return (
               <button
                 key={item.id}
@@ -93,6 +99,21 @@ export function StudentSidebar({
                   {item.emoji}
                 </span>
                 <span className="min-w-0 flex-1 leading-snug">{item.label}</span>
+                {showAssignDot ? (
+                  <span
+                    className={`size-2 shrink-0 rounded-full ${
+                      assignmentAlertDot === 'red'
+                        ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.65)]'
+                        : 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.55)]'
+                    }`}
+                    title={
+                      assignmentAlertDot === 'red'
+                        ? 'Yeni atanmış ödev'
+                        : 'Yaklaşan teslim veya devam eden ödev'
+                    }
+                    aria-hidden
+                  />
+                ) : null}
                 {item.hint ? (
                   <span className="shrink-0 rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-slate-500">
                     {item.hint}

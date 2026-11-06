@@ -186,6 +186,8 @@ export interface StudentAssignment {
   teacherName: string;
   status: string;
   assignedAt: string;
+  /** Son teslim (ISO); sütun yoksa null. */
+  dueDate: string | null;
   assignmentType: StudentAssignmentType;
   /** Çalışma ataması için okuma metni (study). */
   studyMaterialText: string | null;
@@ -230,13 +232,29 @@ export async function getStudentAssignmentsAction(): Promise<{
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
-    const { data: rows, error: assignError } = await client
+    type AssignmentRow = {
+      id: string;
+      status: string;
+      created_at: string;
+      due_date: string | null;
+      teacher_id: string;
+      assignment_type: string | null;
+      exam_payload: unknown;
+      libraries:
+        | { title: string; curriculum: string; extracted_text: string | null }
+        | { title: string; curriculum: string; extracted_text: string | null }[]
+        | null;
+    };
+
+    let rows: AssignmentRow[] | null = null;
+    let { data: rowsRaw, error: assignError } = await client
       .from('assignments')
       .select(
         `
         id,
         status,
         created_at,
+        due_date,
         teacher_id,
         assignment_type,
         exam_payload,
@@ -250,6 +268,34 @@ export async function getStudentAssignmentsAction(): Promise<{
       .eq('student_id', current.user.id)
       .not('teacher_id', 'is', null)
       .order('created_at', { ascending: false });
+    rows = (rowsRaw ?? []) as AssignmentRow[];
+
+    if (assignError?.code === '42703') {
+      const fb = await client
+        .from('assignments')
+        .select(
+          `
+        id,
+        status,
+        created_at,
+        teacher_id,
+        assignment_type,
+        exam_payload,
+        libraries (
+          title,
+          curriculum,
+          extracted_text
+        )
+      `,
+        )
+        .eq('student_id', current.user.id)
+        .not('teacher_id', 'is', null)
+        .order('created_at', { ascending: false });
+      rows = ((fb.data ?? []) as Omit<AssignmentRow, 'due_date'>[]).map(
+        (r) => ({ ...r, due_date: null }),
+      );
+      assignError = fb.error;
+    }
 
     if (assignError) {
       console.error(
@@ -259,20 +305,7 @@ export async function getStudentAssignmentsAction(): Promise<{
       return { success: false, error: 'Ödev listesi okunamadı.' };
     }
 
-    type AssignmentRow = {
-      id: string;
-      status: string;
-      created_at: string;
-      teacher_id: string;
-      assignment_type: string | null;
-      exam_payload: unknown;
-      libraries:
-        | { title: string; curriculum: string; extracted_text: string | null }
-        | { title: string; curriculum: string; extracted_text: string | null }[]
-        | null;
-    };
-
-    const assignmentRows = (rows ?? []) as AssignmentRow[];
+    const assignmentRows = rows ?? [];
 
     const examAssignmentIds = assignmentRows
       .filter(
@@ -386,6 +419,10 @@ export async function getStudentAssignmentsAction(): Promise<{
           teacherNameById.get(row.teacher_id) ?? 'Eğitmen',
         status: row.status,
         assignedAt: row.created_at,
+        dueDate:
+          typeof row.due_date === 'string' && row.due_date.trim()
+            ? row.due_date
+            : null,
         assignmentType,
         studyMaterialText:
           assignmentType === 'study'

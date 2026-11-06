@@ -1,11 +1,17 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, useTransition, type ReactNode } from 'react';
-import { ClipboardList, Loader2, MessageCircle, RefreshCw } from 'lucide-react';
+import { useMemo, useState, useTransition, type ReactNode } from 'react';
+import {
+  ClipboardList,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+} from 'lucide-react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { ConversationMessage } from '@/app/messages/actions';
 import type { TeacherAssignmentProgressRow } from '@/app/teacher/library-actions';
+import { sendAssignmentOverdueReminderFormAction } from '@/app/teacher/library-actions';
 import {
   MessageConversationModal,
   type MessageThreadTarget,
@@ -32,6 +38,8 @@ interface TeacherAssignmentsProgressSectionProps {
     assignmentId?: string,
   ) => Promise<{ success: boolean; error?: string }>;
 }
+
+type StatusBucketFilter = 'all' | 'pending' | 'overdue' | 'completed';
 
 function statusBadge(status: string): ReactNode {
   if (status === 'in_progress') {
@@ -85,6 +93,33 @@ function formatDate(iso: string): string {
   }).format(date);
 }
 
+function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('tr-TR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function isOverdueRow(row: TeacherAssignmentProgressRow, now: number): boolean {
+  if (row.status === 'completed') return false;
+  if (!row.dueDate) return false;
+  const t = new Date(row.dueDate).getTime();
+  if (Number.isNaN(t)) return false;
+  return t < now;
+}
+
+const FILTER_PILLS: { id: StatusBucketFilter; label: string }[] = [
+  { id: 'all', label: 'Tümü' },
+  { id: 'pending', label: 'Bekleyenler' },
+  { id: 'overdue', label: 'Gecikenler' },
+  { id: 'completed', label: 'Tamamlananlar' },
+];
+
 export function TeacherAssignmentsProgressSection({
   rows,
   unreadByAssignment,
@@ -94,14 +129,67 @@ export function TeacherAssignmentsProgressSection({
 }: TeacherAssignmentsProgressSectionProps): ReactNode {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [remindPending, startRemind] = useTransition();
   const [messageTarget, setMessageTarget] =
     useState<MessageThreadTarget | null>(null);
+  const [studentFilter, setStudentFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] =
+    useState<StatusBucketFilter>('all');
+  const [toast, setToast] = useState<string | null>(null);
+  const [remindingId, setRemindingId] = useState<string | null>(null);
+
+  const studentOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (!map.has(row.studentId)) {
+        map.set(row.studentId, row.studentFullName);
+      }
+    }
+    return [...map.entries()].sort((a, b) =>
+      a[1].localeCompare(b[1], 'tr'),
+    );
+  }, [rows]);
+
+  const filteredRows = useMemo(() => {
+    const now = Date.now();
+    return rows.filter((row) => {
+      if (studentFilter && row.studentId !== studentFilter) return false;
+      if (statusFilter === 'all') return true;
+      if (statusFilter === 'completed') return row.status === 'completed';
+      const overdue = isOverdueRow(row, now);
+      if (statusFilter === 'overdue') return overdue;
+      if (statusFilter === 'pending') {
+        return row.status !== 'completed' && !overdue;
+      }
+      return true;
+    });
+  }, [rows, studentFilter, statusFilter]);
 
   function handleRefresh() {
     startTransition(() => {
       router.refresh();
     });
   }
+
+  function handleRemind(row: TeacherAssignmentProgressRow) {
+    setToast(null);
+    setRemindingId(row.assignmentId);
+    startRemind(async () => {
+      const result = await sendAssignmentOverdueReminderFormAction(
+        row.assignmentId,
+        row.materialTitle,
+      );
+      setRemindingId(null);
+      if (!result.success) {
+        setToast(result.error ?? 'Hatırlatma gönderilemedi.');
+        return;
+      }
+      setToast('Hatırlatma mesajı öğrenciye gönderildi.');
+      router.refresh();
+    });
+  }
+
+  const now = Date.now();
 
   return (
     <div className="space-y-4">
@@ -129,6 +217,54 @@ export function TeacherAssignmentsProgressSection({
         </button>
       </div>
 
+      {rows.length > 0 ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <label className="block min-w-[200px] flex-1 text-xs text-slate-500">
+            Öğrenci
+            <select
+              value={studentFilter}
+              onChange={(e) => setStudentFilter(e.target.value)}
+              className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-400/45"
+            >
+              <option value="">Tüm öğrenciler</option>
+              {studentOptions.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-slate-500">Durum</p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {FILTER_PILLS.map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => setStatusFilter(pill.id)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
+                    statusFilter === pill.id
+                      ? 'border-indigo-400/50 bg-indigo-500/25 text-indigo-50'
+                      : 'border-white/10 bg-white/[0.04] text-slate-400 hover:border-white/20 hover:text-slate-200'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {toast ? (
+        <div
+          role="status"
+          className="rounded-xl border border-emerald-400/35 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100"
+        >
+          {toast}
+        </div>
+      ) : null}
+
       <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
         {rows.length === 0 ? (
           <div className="px-6 py-14 text-center">
@@ -140,62 +276,109 @@ export function TeacherAssignmentsProgressSection({
               Kütüphane sekmesinden materyal atadığında burada görünür.
             </p>
           </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="px-6 py-10 text-center text-sm text-slate-500">
+            Bu filtrelere uyan kayıt yok.
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left text-sm">
+            <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th className="px-6 py-3 font-medium">Öğrenci</th>
                   <th className="px-6 py-3 font-medium">Materyal</th>
                   <th className="px-6 py-3 font-medium">Atama Tarihi</th>
+                  <th className="px-6 py-3 font-medium">Son Teslim</th>
                   <th className="px-6 py-3 font-medium">Durum</th>
                   <th className="px-6 py-3 font-medium">Sınav Notu / Sonuç</th>
-                  <th className="px-6 py-3 text-right font-medium">İletişim</th>
+                  <th className="px-6 py-3 text-right font-medium">
+                    İletişim
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {rows.map((row) => (
-                  <tr
-                    key={row.assignmentId}
-                    className="transition hover:bg-white/[0.02]"
-                  >
-                    <td className="px-6 py-4 font-medium text-slate-100">
-                      {row.studentFullName}
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-slate-200">{row.materialTitle}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {row.curriculum}
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-slate-400">
-                      {formatDate(row.assignedAt)}
-                    </td>
-                    <td className="px-6 py-4">{statusBadge(row.status)}</td>
-                    <td className="px-6 py-4">{examResultBadge(row.examResult)}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setMessageTarget({
-                            partnerId: row.studentId,
-                            partnerLabel: row.studentFullName,
-                            assignmentId: row.assignmentId,
-                            contextLabel: row.materialTitle,
-                          })
-                        }
-                        className="relative inline-flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
-                      >
-                        <MessageCircle className="size-3.5" />
-                        Mesajlar
-                        <UnreadMessageBadge
-                          count={unreadByAssignment[row.assignmentId] ?? 0}
-                          className="absolute -top-1.5 -right-1.5"
-                        />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredRows.map((row) => {
+                  const overdue =
+                    row.status !== 'completed' &&
+                    isOverdueRow(row, now);
+                  const showRemind =
+                    overdue && row.dueDate != null;
+
+                  return (
+                    <tr
+                      key={row.assignmentId}
+                      className="transition hover:bg-white/[0.02]"
+                    >
+                      <td className="px-6 py-4 font-medium text-slate-100">
+                        {row.studentFullName}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-slate-200">{row.materialTitle}</p>
+                          {overdue ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/45 bg-rose-500/15 px-2 py-0.5 text-[10px] font-semibold text-rose-100">
+                              <span aria-hidden>⏱️</span>
+                              Gecikti
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {row.curriculum}
+                        </p>
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">
+                        {formatDate(row.assignedAt)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-400">
+                        {row.dueDate ? formatDateTime(row.dueDate) : '—'}
+                      </td>
+                      <td className="px-6 py-4">{statusBadge(row.status)}</td>
+                      <td className="px-6 py-4">
+                        {examResultBadge(row.examResult)}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {showRemind ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRemind(row)}
+                              disabled={remindPending && remindingId === row.assignmentId}
+                              className="inline-flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/22 disabled:opacity-50"
+                            >
+                              {remindPending && remindingId === row.assignmentId ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <span aria-hidden>🔔</span>
+                              )}
+                              Hatırlat
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setMessageTarget({
+                                partnerId: row.studentId,
+                                partnerLabel: row.studentFullName,
+                                assignmentId: row.assignmentId,
+                                contextLabel: row.materialTitle,
+                              })
+                            }
+                            className="relative inline-flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+                          >
+                            <MessageCircle className="size-3.5" />
+                            Mesajlar
+                            <UnreadMessageBadge
+                              count={
+                                unreadByAssignment[row.assignmentId] ?? 0
+                              }
+                              className="absolute -top-1.5 -right-1.5"
+                            />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

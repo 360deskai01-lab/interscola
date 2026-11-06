@@ -26,11 +26,13 @@ interface TeacherLibrarySectionProps {
   onAssignMaterial: (
     libraryId: string,
     studentId: string,
+    dueDate?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   onAssignGeneratedExam: (
     libraryId: string,
     studentId: string,
     examPayload: AssessmentPayload,
+    dueDate?: string | null,
   ) => Promise<{ success: boolean; error?: string }>;
   onGenerateExamFromLibrary: (
     libraryId: string,
@@ -93,6 +95,9 @@ export function TeacherLibrarySection({
   const [previewLibraryId, setPreviewLibraryId] = useState<string | null>(null);
   const [previewLibraryTitle, setPreviewLibraryTitle] = useState('');
   const [previewExam, setPreviewExam] = useState<AssessmentPayload | null>(null);
+  const [assignDrafts, setAssignDrafts] = useState<
+    Record<string, { studentId: string; dueLocal: string }>
+  >({});
 
   function defaultQuestionCountForCurriculum(curriculum: string): number {
     const mode = EXAM_MODES.find((item) => item.curriculum === curriculum);
@@ -159,7 +164,15 @@ export function TeacherLibrarySection({
     });
   }
 
-  function handleAssign(libraryId: string, studentId: string) {
+  function dueLocalToIsoOrNull(dueLocal: string): string | null {
+    const t = dueLocal.trim();
+    if (!t) return null;
+    const d = new Date(t);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
+  function handleAssign(libraryId: string, studentId: string, dueLocal: string) {
     if (!studentId) {
       setError('Lütfen bir öğrenci seç.');
       return;
@@ -170,7 +183,11 @@ export function TeacherLibrarySection({
     setAssigningLibraryId(libraryId);
 
     startTransition(async () => {
-      const result = await onAssignMaterial(libraryId, studentId);
+      const result = await onAssignMaterial(
+        libraryId,
+        studentId,
+        dueLocalToIsoOrNull(dueLocal),
+      );
       setAssigningLibraryId(null);
 
       if (!result.success) {
@@ -179,8 +196,26 @@ export function TeacherLibrarySection({
       }
 
       setSuccess('Materyal öğrenciye atandı.');
+      setAssignDrafts((current) => ({
+        ...current,
+        [libraryId]: { studentId: '', dueLocal: '' },
+      }));
       router.refresh();
     });
+  }
+
+  function patchAssignDraft(
+    libraryId: string,
+    patch: Partial<{ studentId: string; dueLocal: string }>,
+  ) {
+    setAssignDrafts((current) => ({
+      ...current,
+      [libraryId]: {
+        studentId:
+          patch.studentId ?? current[libraryId]?.studentId ?? '',
+        dueLocal: patch.dueLocal ?? current[libraryId]?.dueLocal ?? '',
+      },
+    }));
   }
 
   return (
@@ -337,8 +372,12 @@ export function TeacherLibrarySection({
                   ) : (
                     <>
                       <select
-                        id={`assign-${item.id}`}
-                        defaultValue=""
+                        value={assignDrafts[item.id]?.studentId ?? ''}
+                        onChange={(e) =>
+                          patchAssignDraft(item.id, {
+                            studentId: e.target.value,
+                          })
+                        }
                         disabled={pending && assigningLibraryId === item.id}
                         className="min-w-[160px] rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 outline-none focus:border-indigo-400/50"
                         aria-label={`${item.title} için öğrenci seç`}
@@ -352,15 +391,30 @@ export function TeacherLibrarySection({
                           </option>
                         ))}
                       </select>
+                      <label className="flex min-w-[200px] flex-col text-[10px] font-medium text-slate-500">
+                        Son teslim (opsiyonel)
+                        <input
+                          type="datetime-local"
+                          value={assignDrafts[item.id]?.dueLocal ?? ''}
+                          onChange={(e) =>
+                            patchAssignDraft(item.id, {
+                              dueLocal: e.target.value,
+                            })
+                          }
+                          disabled={pending && assigningLibraryId === item.id}
+                          className="mt-1 rounded-xl border border-white/10 bg-slate-950/60 px-2 py-2 text-xs text-slate-100 outline-none focus:border-indigo-400/45"
+                        />
+                      </label>
                       <button
                         type="button"
                         disabled={pending && assigningLibraryId === item.id}
                         onClick={() => {
-                          const select = document.getElementById(
-                            `assign-${item.id}`,
-                          ) as HTMLSelectElement | null;
-                          const studentId = select?.value ?? '';
-                          handleAssign(item.id, studentId);
+                          const draft = assignDrafts[item.id];
+                          handleAssign(
+                            item.id,
+                            draft?.studentId ?? '',
+                            draft?.dueLocal ?? '',
+                          );
                         }}
                         className="flex items-center gap-1.5 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-3.5 py-2 text-xs font-medium text-indigo-200 transition hover:bg-indigo-500/25 disabled:opacity-50"
                       >
