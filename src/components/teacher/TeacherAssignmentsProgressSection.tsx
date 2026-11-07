@@ -10,14 +10,19 @@ import {
 } from 'lucide-react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { ConversationMessage } from '@/app/messages/actions';
-import type { TeacherStudent } from '@/app/teacher/actions';
 import {
   sendAssignmentOverdueReminderFormAction,
   type LibraryItem,
   type TeacherAssignmentProgressRow,
 } from '@/app/teacher/library-actions';
-import type { CreateTeacherAssignmentInput } from '@/lib/b2b/teacher-assignment-actions';
-import { TeacherAssignFromLibraryModal } from '@/components/teacher/TeacherAssignFromLibraryModal';
+import type {
+  CreateTeacherAssignmentInput,
+  TeacherAssignmentStudentOption,
+} from '@/lib/b2b/teacher-assignment-actions';
+import {
+  TeacherAssignFromLibraryModal,
+  type TeacherAssignSubmitResult,
+} from '@/components/teacher/TeacherAssignFromLibraryModal';
 import {
   MessageConversationModal,
   type MessageThreadTarget,
@@ -26,10 +31,10 @@ import {
 interface TeacherAssignmentsProgressSectionProps {
   rows: TeacherAssignmentProgressRow[];
   libraryItems: LibraryItem[];
-  students: TeacherStudent[];
+  assignmentStudentPool: TeacherAssignmentStudentOption[];
   onCreateTeacherAssignment: (
     input: CreateTeacherAssignmentInput,
-  ) => Promise<{ success: boolean; error?: string; count?: number }>;
+  ) => Promise<TeacherAssignSubmitResult>;
   unreadByAssignment: Record<string, number>;
   onLoadConversation: (
     partnerId: string,
@@ -147,7 +152,7 @@ const FILTER_PILLS: { id: StatusBucketFilter; label: string }[] = [
 export function TeacherAssignmentsProgressSection({
   rows,
   libraryItems,
-  students,
+  assignmentStudentPool,
   onCreateTeacherAssignment,
   unreadByAssignment,
   onLoadConversation,
@@ -480,12 +485,18 @@ export function TeacherAssignmentsProgressSection({
         open={assignModalOpen}
         onClose={() => setAssignModalOpen(false)}
         libraryItems={libraryItems}
-        students={students}
+        studentPool={assignmentStudentPool}
         onSubmit={onCreateTeacherAssignment}
-        onSuccess={() => {
-          setToast(
-            'Atama kaydedildi; liste yenilendiğinde güncel durumu görürsünüz.',
-          );
+        onSuccess={(result: TeacherAssignSubmitResult) => {
+          const skipped = result.skippedCount ?? 0;
+          const count = result.count ?? 0;
+          if (skipped > 0) {
+            setToast(
+              `✅ ${count} öğrenciye atandı. ⚠️ ${skipped} öğrenci zaten bu göreve sahip olduğu için atlandı.`,
+            );
+          } else {
+            setToast(`✅ ${count} öğrenciye başarıyla atandı.`);
+          }
           router.refresh();
         }}
       />

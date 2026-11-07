@@ -1,30 +1,44 @@
 'use client';
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from 'react';
-import { Loader2, X } from 'lucide-react';
-import type { TeacherStudent } from '@/app/teacher/actions';
+import { Calendar, Clock, Loader2, X } from 'lucide-react';
 import type { LibraryItem } from '@/app/teacher/library-actions';
 import type {
   CreateTeacherAssignmentInput,
+  TeacherAssignmentStudentOption,
   TeacherBulkAssignmentKind,
 } from '@/lib/b2b/teacher-assignment-actions';
+
+export interface TeacherAssignSubmitResult {
+  success: boolean;
+  error?: string;
+  count?: number;
+  skippedCount?: number;
+  message?: string;
+}
 
 export interface TeacherAssignFromLibraryModalProps {
   open: boolean;
   onClose: () => void;
   libraryItems: LibraryItem[];
-  students: TeacherStudent[];
+  studentPool: TeacherAssignmentStudentOption[];
   onSubmit: (
     input: CreateTeacherAssignmentInput,
-  ) => Promise<{ success: boolean; error?: string; count?: number }>;
-  onSuccess?: () => void;
+  ) => Promise<TeacherAssignSubmitResult>;
+  onSuccess?: (result: TeacherAssignSubmitResult) => void;
+}
+
+function localDatetimeMin(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export function TeacherAssignFromLibraryModal({
   open,
   onClose,
   libraryItems,
-  students,
+  studentPool,
   onSubmit,
   onSuccess,
 }: TeacherAssignFromLibraryModalProps): ReactNode {
@@ -36,6 +50,12 @@ export function TeacherAssignFromLibraryModal({
   const [dueDate, setDueDate] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [resultBanner, setResultBanner] = useState<{
+    tone: 'success' | 'warning';
+    text: string;
+  } | null>(null);
+
+  const minDueLocal = useMemo(() => localDatetimeMin(), [open]);
 
   const selectedLibrary = useMemo(
     () => libraryItems.find((item) => item.id === libraryId) ?? null,
@@ -54,6 +74,7 @@ export function TeacherAssignFromLibraryModal({
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setResultBanner(null);
     if (libraryItems.length > 0 && !libraryId) {
       setLibraryId(libraryItems[0].id);
     }
@@ -77,7 +98,7 @@ export function TeacherAssignFromLibraryModal({
   }
 
   function selectAll() {
-    setSelected(new Set(students.map((s) => s.studentId)));
+    setSelected(new Set(studentPool.map((s) => s.studentId)));
   }
 
   function clearAll() {
@@ -86,6 +107,7 @@ export function TeacherAssignFromLibraryModal({
 
   function handleSubmit() {
     setError(null);
+    setResultBanner(null);
     if (!libraryId) {
       setError('Lütfen kütüphaneden bir sınav seçin.');
       return;
@@ -111,10 +133,30 @@ export function TeacherAssignFromLibraryModal({
         setError(result.error ?? 'Atama yapılamadı.');
         return;
       }
-      onSuccess?.();
-      onClose();
-      setSelected(new Set());
-      setDueDate('');
+
+      const assigned = result.count ?? 0;
+      const skipped = result.skippedCount ?? 0;
+
+      if (skipped > 0) {
+        setResultBanner({
+          tone: 'warning',
+          text: `✅ ${assigned} öğrenciye atandı. ⚠️ ${skipped} öğrenci zaten bu göreve sahip olduğu için atlandı.`,
+        });
+      } else {
+        setResultBanner({
+          tone: 'success',
+          text: `✅ ${assigned} öğrenciye başarıyla atandı.`,
+        });
+      }
+
+      onSuccess?.(result);
+
+      window.setTimeout(() => {
+        onClose();
+        setSelected(new Set());
+        setDueDate('');
+        setResultBanner(null);
+      }, 1600);
     });
   }
 
@@ -155,6 +197,19 @@ export function TeacherAssignFromLibraryModal({
             className="mt-4 rounded-lg border border-rose-400/35 bg-rose-500/10 px-3 py-2 text-sm text-rose-100"
           >
             {error}
+          </div>
+        ) : null}
+
+        {resultBanner ? (
+          <div
+            role="status"
+            className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+              resultBanner.tone === 'warning'
+                ? 'border-amber-400/40 bg-amber-500/15 text-amber-50'
+                : 'border-emerald-400/40 bg-emerald-500/15 text-emerald-50'
+            }`}
+          >
+            {resultBanner.text}
           </div>
         ) : null}
 
@@ -216,15 +271,32 @@ export function TeacherAssignFromLibraryModal({
             </div>
           </fieldset>
 
-          <label className="block text-xs text-slate-400">
-            Son teslim (isteğe bağlı)
-            <input
-              type="datetime-local"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 outline-none focus:border-indigo-400/45"
-            />
-          </label>
+          <div className="block text-xs text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <Calendar className="size-3.5 text-slate-500" aria-hidden />
+              <Clock className="size-3.5 text-slate-500" aria-hidden />
+              Son teslim tarihi ve saati (opsiyonel — takvimden seçin)
+            </span>
+            <div className="relative mt-1.5">
+              <Calendar className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-500" />
+              <input
+                type="datetime-local"
+                value={dueDate}
+                min={minDueLocal}
+                onChange={(e) => setDueDate(e.target.value)}
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 px-4 py-2.5 pl-10 text-sm text-slate-200 outline-none focus:border-indigo-500 [color-scheme:dark]"
+              />
+            </div>
+            {dueDate ? (
+              <button
+                type="button"
+                onClick={() => setDueDate('')}
+                className="mt-1.5 text-[11px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+              >
+                Tarihi temizle
+              </button>
+            ) : null}
+          </div>
 
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -247,12 +319,12 @@ export function TeacherAssignFromLibraryModal({
               </div>
             </div>
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/50 p-2">
-              {students.length === 0 ? (
+              {studentPool.length === 0 ? (
                 <li className="px-2 py-3 text-center text-sm text-slate-500">
-                  Bağlı öğrenci yok — önce davet kodu paylaşın.
+                  Bağlı veya kurum şubesinde öğrenci yok.
                 </li>
               ) : (
-                students.map((student) => {
+                studentPool.map((student) => {
                   const checked = selected.has(student.studentId);
                   return (
                     <li key={student.studentId}>
@@ -263,11 +335,17 @@ export function TeacherAssignFromLibraryModal({
                           onChange={() => toggleStudent(student.studentId)}
                           className="size-4 rounded border-white/20"
                         />
-                        <span className="text-sm text-slate-200">
+                        <span className="min-w-0 flex-1 text-sm text-slate-200">
                           {student.fullName}
                         </span>
-                        <span className="ml-auto truncate text-xs text-slate-500">
-                          {student.email}
+                        <span
+                          className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${
+                            student.source === 'individual'
+                              ? 'border-sky-400/30 bg-sky-500/10 text-sky-100'
+                              : 'border-violet-400/30 bg-violet-500/10 text-violet-100'
+                          }`}
+                        >
+                          {student.scopeLabel}
                         </span>
                       </label>
                     </li>
@@ -293,7 +371,7 @@ export function TeacherAssignFromLibraryModal({
             disabled={
               pending ||
               libraryItems.length === 0 ||
-              students.length === 0
+              studentPool.length === 0
             }
             className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >

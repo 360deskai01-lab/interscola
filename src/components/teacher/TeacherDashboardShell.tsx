@@ -21,7 +21,11 @@ import { TeacherPanel } from '@/components/teacher/TeacherPanel';
 import type { FacultyColleague } from '@/app/teacher/faculty-actions';
 import type { WeeklyDigestRow } from '@/app/teacher/digest-actions';
 import type { OfficialExamScheduleSummary } from '@/types/exam-radar';
-import type { CreateTeacherAssignmentInput } from '@/lib/b2b/teacher-assignment-actions';
+import type {
+  CreateTeacherAssignmentInput,
+  TeacherAssignmentStudentOption,
+} from '@/lib/b2b/teacher-assignment-actions';
+import type { TeacherAssignSubmitResult } from '@/components/teacher/TeacherAssignFromLibraryModal';
 
 export interface TeacherDashboardShellProps {
   profileEmail: string;
@@ -30,6 +34,7 @@ export interface TeacherDashboardShellProps {
   invites: TeacherInvite[];
   libraryItems: LibraryItem[];
   assignmentProgress: TeacherAssignmentProgressRow[];
+  assignmentStudentPool: TeacherAssignmentStudentOption[];
   orgContext: TeacherOrganizationContext | null;
   onCreateInvite: () => Promise<{
     success: boolean;
@@ -70,7 +75,7 @@ export interface TeacherDashboardShellProps {
   }>;
   onCreateTeacherAssignment: (
     input: CreateTeacherAssignmentInput,
-  ) => Promise<{ success: boolean; error?: string; count?: number }>;
+  ) => Promise<TeacherAssignSubmitResult>;
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,

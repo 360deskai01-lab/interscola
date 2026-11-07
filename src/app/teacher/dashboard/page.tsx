@@ -36,7 +36,10 @@ import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { TeacherDashboardShell } from '@/components/teacher/TeacherDashboardShell';
 import { UNREAD_GENERAL_AGGREGATE_KEY } from '@/lib/message-unread-scopes';
 import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
-import { createTeacherAssignmentFormAction } from '@/lib/b2b/teacher-assignment-actions';
+import {
+  createTeacherAssignmentFormAction,
+  getTeacherAssignmentStudentPoolAction,
+} from '@/lib/b2b/teacher-assignment-actions';
 
 export const instant = false;
 
@@ -75,14 +78,21 @@ export default async function TeacherDashboardPage({
     redirect('/');
   }
 
-  const [result, libraryResult, progressResult, orgContextResult, unreadResult] =
-    await Promise.all([
-      getTeacherStudentsAction(),
-      getTeacherLibraryAction(),
-      getTeacherAssignmentsProgressAction(),
-      getTeacherOrganizationContextAction(),
-      getUnreadCountsByAssignmentAction(),
-    ]);
+  const [
+    result,
+    libraryResult,
+    progressResult,
+    orgContextResult,
+    unreadResult,
+    studentPoolResult,
+  ] = await Promise.all([
+    getTeacherStudentsAction(),
+    getTeacherLibraryAction(),
+    getTeacherAssignmentsProgressAction(),
+    getTeacherOrganizationContextAction(),
+    getUnreadCountsByAssignmentAction(),
+    getTeacherAssignmentStudentPoolAction(),
+  ]);
   const unreadCounts = unreadResult.counts ?? {};
   const data = result.success ? result.data : undefined;
 
@@ -93,6 +103,15 @@ export default async function TeacherDashboardPage({
   const assignmentProgress = progressResult.success
     ? (progressResult.data ?? [])
     : [];
+  const assignmentStudentPool = studentPoolResult.success
+    ? (studentPoolResult.data ?? [])
+    : students.map((s) => ({
+        studentId: s.studentId,
+        fullName: s.fullName,
+        email: s.email,
+        scopeLabel: 'Bireysel öğrenci',
+        source: 'individual' as const,
+      }));
   const assignmentVolume = assignmentProgress.filter(
     (row) => row.libraryId !== null,
   ).length;
@@ -167,6 +186,7 @@ export default async function TeacherDashboardPage({
           invites={invites}
           libraryItems={libraryItems}
           assignmentProgress={assignmentProgress}
+          assignmentStudentPool={assignmentStudentPool}
           orgContext={orgContext}
           onCreateInvite={createInviteFormAction}
           onRemoveStudent={removeStudentFormAction}

@@ -60,7 +60,11 @@ import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/tea
 import type { TeacherDashboardTab } from '@/lib/teacher-dashboard/dashboard-tabs';
 import { TeacherExamRadarChip } from '@/components/teacher/TeacherExamRadarChip';
 import type { OfficialExamScheduleSummary } from '@/types/exam-radar';
-import type { CreateTeacherAssignmentInput } from '@/lib/b2b/teacher-assignment-actions';
+import type {
+  CreateTeacherAssignmentInput,
+  TeacherAssignmentStudentOption,
+} from '@/lib/b2b/teacher-assignment-actions';
+import type { TeacherAssignSubmitResult } from '@/components/teacher/TeacherAssignFromLibraryModal';
 
 interface TeacherPanelProps {
   activeTab: TeacherDashboardTab;
@@ -70,6 +74,7 @@ interface TeacherPanelProps {
   invites: TeacherInvite[];
   libraryItems: LibraryItem[];
   assignmentProgress: TeacherAssignmentProgressRow[];
+  assignmentStudentPool: TeacherAssignmentStudentOption[];
   orgContext: TeacherOrganizationContext | null;
   onCreateInvite: () => Promise<{
     success: boolean;
@@ -110,7 +115,7 @@ interface TeacherPanelProps {
   }>;
   onCreateTeacherAssignment: (
     input: CreateTeacherAssignmentInput,
-  ) => Promise<{ success: boolean; error?: string; count?: number }>;
+  ) => Promise<TeacherAssignSubmitResult>;
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
@@ -233,6 +238,7 @@ export function TeacherPanel({
   invites,
   libraryItems,
   assignmentProgress,
+  assignmentStudentPool,
   orgContext,
   onCreateInvite,
   onRemoveStudent,
@@ -395,7 +401,7 @@ export function TeacherPanel({
           <TeacherAssignmentsProgressSection
             rows={assignmentProgress}
             libraryItems={libraryItems}
-            students={students}
+            assignmentStudentPool={assignmentStudentPool}
             onCreateTeacherAssignment={onCreateTeacherAssignment}
             unreadByAssignment={unreadByAssignment}
             onLoadConversation={onLoadConversation}

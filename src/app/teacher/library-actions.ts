@@ -296,6 +296,79 @@ async function isActiveStudentOfTeacher(
   return Boolean(data);
 }
 
+const TEACHER_ORG_ASSIGN_ROLES = new Set(['teacher', 'coordinator']);
+
+async function isOrgBranchStudentAssignable(
+  client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
+  teacherId: string,
+  studentId: string,
+): Promise<boolean> {
+  const { data: teacherMember, error: teacherMemberError } = await client
+    .from('organization_members')
+    .select('organization_id, branch_id, org_role')
+    .eq('user_id', teacherId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (teacherMemberError?.code === '42P01') {
+    return false;
+  }
+  if (teacherMemberError || !teacherMember) {
+    return false;
+  }
+
+  const teacherRow = teacherMember as {
+    organization_id: string;
+    branch_id: string | null;
+    org_role: string | null;
+  };
+
+  if (
+    !teacherRow.org_role ||
+    !TEACHER_ORG_ASSIGN_ROLES.has(teacherRow.org_role)
+  ) {
+    return false;
+  }
+
+  let query = client
+    .from('organization_members')
+    .select('id')
+    .eq('organization_id', teacherRow.organization_id)
+    .eq('user_id', studentId)
+    .eq('org_role', 'student')
+    .eq('is_active', true);
+
+  if (teacherRow.branch_id) {
+    query = query.eq('branch_id', teacherRow.branch_id);
+  }
+
+  const { data: studentMember, error: studentMemberError } =
+    await query.maybeSingle();
+
+  if (studentMemberError) {
+    console.error(
+      '[library] Kurum öğrenci üyeliği doğrulanamadı:',
+      studentMemberError.message,
+    );
+    return false;
+  }
+
+  return Boolean(studentMember);
+}
+
+async function canTeacherAssignToStudent(
+  client: NonNullable<Awaited<ReturnType<typeof getProfilesClient>>>,
+  teacherId: string,
+  studentId: string,
+): Promise<boolean> {
+  if (await isActiveStudentOfTeacher(client, teacherId, studentId)) {
+    return true;
+  }
+  return isOrgBranchStudentAssignable(client, teacherId, studentId);
+}
+
 export type AssignmentType = 'study' | 'exam';
 
 export async function assignStudyMaterialAction(
@@ -352,7 +425,7 @@ export async function assignStudyMaterialAction(
       return { success: false, error: 'Bu materyal size ait değil.' };
     }
 
-    const linked = await isActiveStudentOfTeacher(
+    const linked = await canTeacherAssignToStudent(
       client,
       teacher.id,
       studentId,
@@ -631,7 +704,7 @@ export async function assignGeneratedExamAction(
       return { success: false, error: 'Bu materyal size ait değil.' };
     }
 
-    const linked = await isActiveStudentOfTeacher(
+    const linked = await canTeacherAssignToStudent(
       client,
       teacher.id,
       studentId,
