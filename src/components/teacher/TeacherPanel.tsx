@@ -330,6 +330,8 @@ export function TeacherPanel({
 
         {activeTab === 'overview' ? (
           <div className="space-y-6">
+            <TeacherExamRadarChip exam={nearestOfficialExam} />
+
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <OverviewStatCard
                 icon={Users}
@@ -371,8 +373,7 @@ export function TeacherPanel({
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
-              <TeacherExamRadarChip exam={nearestOfficialExam} />
-              <h2 className="mt-4 text-sm font-medium text-slate-200">
+              <h2 className="text-sm font-medium text-slate-200">
                 Hoş geldin, öğretmen
               </h2>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">
