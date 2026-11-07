@@ -22,6 +22,7 @@ import { isRecord } from '@/lib/exam-shared';
 import {
   clearExamSessionRecovery,
   readExamSessionRecovery,
+  resolveExamSessionRecoveryTiming,
   writeExamSessionRecovery,
 } from '@/lib/exam/exam-session-recovery';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
@@ -139,28 +140,20 @@ export function StudentAssignmentExamClient({
     const totalSeconds = resolveExamSessionDurationSeconds(exam);
     const recovered = readExamSessionRecovery(assignmentId);
     const maxIndex = Math.max(0, exam.questions.length - 1);
-    const minRecoveryRemaining = Math.max(
-      120,
-      Math.floor(totalSeconds * 0.2),
-    );
+    const timing = resolveExamSessionRecoveryTiming(recovered, totalSeconds);
 
-    if (recovered) {
+    if (recovered && !timing.trustRecoverySnapshot) {
+      clearExamSessionRecovery(assignmentId);
+    }
+
+    if (recovered && timing.trustRecoverySnapshot) {
       setAnswers(recovered.answers);
       setCurrentIndex(Math.min(recovered.currentIndex, maxIndex));
-      const remaining = Math.max(
-        0,
-        Math.round((recovered.deadlineAt - Date.now()) / 1000),
-      );
-      if (remaining >= minRecoveryRemaining) {
-        deadlineRef.current = recovered.deadlineAt;
-        setSecondsLeft(remaining);
-      } else {
-        deadlineRef.current = Date.now() + totalSeconds * 1000;
-        setSecondsLeft(totalSeconds);
-      }
+      deadlineRef.current = timing.deadlineAt;
+      setSecondsLeft(timing.sessionSeconds);
     } else {
-      deadlineRef.current = Date.now() + totalSeconds * 1000;
-      setSecondsLeft(totalSeconds);
+      deadlineRef.current = timing.deadlineAt;
+      setSecondsLeft(timing.sessionSeconds);
     }
   }, [assignmentId, exam]);
 
@@ -384,6 +377,7 @@ export function StudentAssignmentExamClient({
             onNavigate={goTo}
             onFinish={() => void finishExam()}
             finishDisabled={isFinishing}
+            isGrading={isFinishing}
           />
         ) : null}
 

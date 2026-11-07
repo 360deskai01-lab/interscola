@@ -84,3 +84,56 @@ export function clearExamSessionRecovery(assignmentId: string): void {
     /* yoksay */
   }
 }
+
+/** Bozuk veya süresi dolmuş kurtarma kayıtlarını ayıklamak için alt eşik (sn). */
+export const MIN_TRUSTED_RECOVERY_REMAINING_SECONDS = 60;
+
+export function remainingSecondsUntilDeadline(
+  deadlineAt: number,
+  nowMs: number = Date.now(),
+): number {
+  return Math.max(0, Math.round((deadlineAt - nowMs) / 1000));
+}
+
+export type ExamSessionRecoveryTiming = {
+  /** Kurtarma snapshot'ı güvenilir kabul edildi mi */
+  trustRecoverySnapshot: boolean;
+  /** Oturum sayacına verilecek kalan / tam süre (sn) */
+  sessionSeconds: number;
+  /** deadlineAt (ms); güvenilir kurtarmada snapshot'tan, değilse yeni oturum */
+  deadlineAt: number;
+};
+
+/**
+ * Kurtarılan deadline çok kısa ise (ör. dakika/saniye karışımı) kaydı çöpe atıp
+ * tam resmi süreyi döndürür. Aksi halde kurtarma deadline'ını kullanır.
+ */
+export function resolveExamSessionRecoveryTiming(
+  recovered: ExamSessionRecoverySnapshot | null,
+  officialTotalSeconds: number,
+  nowMs: number = Date.now(),
+): ExamSessionRecoveryTiming {
+  const fallbackDeadline = nowMs + officialTotalSeconds * 1000;
+  if (!recovered) {
+    return {
+      trustRecoverySnapshot: false,
+      sessionSeconds: officialTotalSeconds,
+      deadlineAt: fallbackDeadline,
+    };
+  }
+
+  const remaining = remainingSecondsUntilDeadline(recovered.deadlineAt, nowMs);
+  if (remaining < MIN_TRUSTED_RECOVERY_REMAINING_SECONDS) {
+    return {
+      trustRecoverySnapshot: false,
+      sessionSeconds: officialTotalSeconds,
+      deadlineAt: fallbackDeadline,
+    };
+  }
+
+  return {
+    trustRecoverySnapshot: true,
+    sessionSeconds: remaining,
+    deadlineAt: recovered.deadlineAt,
+  };
+}

@@ -25,10 +25,12 @@ function ChoiceQuestion({
   question,
   selected,
   onSelect,
+  disabled,
 }: {
   question: ExamQuestion;
   selected: string | undefined;
   onSelect: (letter: string) => void;
+  disabled: boolean;
 }): ReactNode {
   const options = question.options ?? [];
 
@@ -42,9 +44,10 @@ function ChoiceQuestion({
           <motion.button
             key={`${question.id}-${letter}`}
             type="button"
+            disabled={disabled}
             onClick={() => onSelect(letter)}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
+            whileHover={disabled ? undefined : { scale: 1.01 }}
+            whileTap={disabled ? undefined : { scale: 0.99 }}
             className={`group flex w-full items-center gap-4 rounded-2xl border px-4 py-4 text-left transition ${
               isSelected
                 ? 'border-indigo-400/70 bg-indigo-500/15 shadow-[0_0_0_1px_rgba(129,140,248,0.5)]'
@@ -85,12 +88,14 @@ function WritingQuestion({
   onChange,
   showWordCount,
   showIeltsLengthHint,
+  disabled,
 }: {
   question: ExamQuestion;
   value: string;
   onChange: (next: string) => void;
   showWordCount: boolean;
   showIeltsLengthHint: boolean;
+  disabled: boolean;
 }): ReactNode {
   const words = countWords(value);
   const isExtended = question.type === 'extended_essay';
@@ -101,6 +106,7 @@ function WritingQuestion({
       <div className="relative">
         <textarea
           value={value}
+          disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           placeholder={
             isExtended
@@ -157,6 +163,8 @@ interface ExamRunnerProps {
   finishLabel?: string;
   /** Çift gönderim veya değerlendirme sırasında bitir düğmesini kilitler. */
   finishDisabled?: boolean;
+  /** Değerlendirme / otomatik gönderim sırasında yanıt girişlerini kilitler. */
+  isGrading?: boolean;
 }
 
 /**
@@ -179,7 +187,9 @@ export function ExamRunner({
   onFinish,
   finishLabel = 'Sınavı bitir',
   finishDisabled = false,
+  isGrading = false,
 }: ExamRunnerProps): ReactNode {
+  const inputsLocked = secondsLeft <= 0 || isGrading;
   const isOpenResponse =
     question.type === 'structured_text' || question.type === 'extended_essay';
   const showWordCount =
@@ -264,6 +274,7 @@ export function ExamRunner({
                   question={question}
                   selected={answers[question.id]}
                   onSelect={(letter) => onAnswer(question.id, letter)}
+                  disabled={inputsLocked}
                 />
               ) : (
                 <WritingQuestion
@@ -272,6 +283,7 @@ export function ExamRunner({
                   onChange={(next) => onAnswer(question.id, next)}
                   showWordCount={showWordCount}
                   showIeltsLengthHint={exam.engineType === 'LANGUAGE'}
+                  disabled={inputsLocked}
                 />
               )}
             </motion.div>

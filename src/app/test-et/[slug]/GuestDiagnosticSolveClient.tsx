@@ -1,7 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 import { ExamRunner } from '@/components/exam/ExamRunner';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
@@ -20,15 +27,63 @@ export function GuestDiagnosticSolveClient({
   slug,
 }: GuestDiagnosticSolveClientProps): ReactNode {
   const router = useRouter();
+  const hasAutoSubmittedRef = useRef(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [secondsLeft, setSecondsLeft] = useState(() =>
-    resolveExamSessionDurationSeconds(exam),
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const officialDurationSeconds = useMemo(
+    () => resolveExamSessionDurationSeconds(exam),
+    [exam],
+  );
+
+  const [secondsLeft, setSecondsLeft] = useState(officialDurationSeconds);
+
+  useEffect(() => {
+    setSecondsLeft(officialDurationSeconds);
+  }, [officialDurationSeconds]);
+
+  const isTimeUp = secondsLeft <= 0;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setSecondsLeft((value) => (value > 0 ? value - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const finishAndNavigate = useCallback(() => {
+    if (hasAutoSubmittedRef.current) return;
+    hasAutoSubmittedRef.current = true;
+    setIsSubmitting(true);
+    const record = scoreGuestDiagnostic({ exam, answers, slug });
+    writeGuestDiagnosticToStorage(record);
+    router.push(`${testEtHref(slug)}/results`);
+  }, [answers, exam, router, slug]);
+
+  useEffect(() => {
+    if (secondsLeft > 0) return;
+    if (hasAutoSubmittedRef.current) return;
+    finishAndNavigate();
+  }, [finishAndNavigate, secondsLeft]);
+
+  const onAnswer = useCallback(
+    (questionId: string, answer: string) => {
+      if (secondsLeft <= 0 || isSubmitting) return;
+      setAnswers((prev) => ({ ...prev, [questionId]: answer }));
+    },
+    [isSubmitting, secondsLeft],
   );
 
   const totalQuestions = exam.questions.length;
   const question = exam.questions[currentIndex];
+
+  function onNavigate(index: number) {
+    if (index < 0 || index >= totalQuestions) return;
+    setDirection(index > currentIndex ? 1 : -1);
+    setCurrentIndex(index);
+  }
   const requiresEveryAnswer =
     exam.engineType === 'LANGUAGE' || exam.engineType === 'RUBRIC_ESSAY';
 
@@ -48,27 +103,8 @@ export function GuestDiagnosticSolveClient({
     [answers, exam.questions],
   );
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setSecondsLeft((value) => (value > 0 ? value - 1 : 0));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const onAnswer = useCallback((questionId: string, answer: string) => {
-    setAnswers((prev) => ({ ...prev, [questionId]: answer }));
-  }, []);
-
-  function onNavigate(index: number) {
-    if (index < 0 || index >= totalQuestions) return;
-    setDirection(index > currentIndex ? 1 : -1);
-    setCurrentIndex(index);
-  }
-
   function onFinish() {
-    const record = scoreGuestDiagnostic({ exam, answers, slug });
-    writeGuestDiagnosticToStorage(record);
-    router.push(`${testEtHref(slug)}/results`);
+    finishAndNavigate();
   }
 
   if (!question) {
@@ -76,21 +112,33 @@ export function GuestDiagnosticSolveClient({
   }
 
   return (
-    <ExamRunner
-      exam={exam}
-      question={question}
-      currentIndex={currentIndex}
-      totalQuestions={totalQuestions}
-      answers={answers}
-      secondsLeft={secondsLeft}
-      direction={direction}
-      requiresEveryAnswer={requiresEveryAnswer}
-      answeredEvery={answeredEvery}
-      unansweredCount={unansweredCount}
-      onAnswer={onAnswer}
-      onNavigate={onNavigate}
-      onFinish={onFinish}
-      finishLabel="Sınavı Tamamla & Puanımı Gör"
-    />
+    <>
+      {isTimeUp ? (
+        <div
+          role="alert"
+          className="mb-4 rounded-2xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-center text-sm font-medium text-rose-100"
+        >
+          ⏳ Süreniz Doldu! Yanıtlarınız kaydediliyor ve puanınız hesaplanıyor...
+        </div>
+      ) : null}
+      <ExamRunner
+        exam={exam}
+        question={question}
+        currentIndex={currentIndex}
+        totalQuestions={totalQuestions}
+        answers={answers}
+        secondsLeft={secondsLeft}
+        direction={direction}
+        requiresEveryAnswer={requiresEveryAnswer}
+        answeredEvery={answeredEvery}
+        unansweredCount={unansweredCount}
+        onAnswer={onAnswer}
+        onNavigate={onNavigate}
+        onFinish={onFinish}
+        finishLabel="Sınavı Tamamla & Puanımı Gör"
+        finishDisabled={isSubmitting || isTimeUp}
+        isGrading={isSubmitting}
+      />
+    </>
   );
 }
