@@ -7,10 +7,25 @@ import {
   ClipboardCopy,
   GraduationCap,
   Globe2,
+  Loader2,
   MapPin,
+  RefreshCw,
   Users,
 } from 'lucide-react';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type ReactNode,
+} from 'react';
+import { useRouter } from 'next/navigation';
+import { rotateCoordinatorJoinCodeAction } from '@/lib/b2b/coordinator-actions';
+import {
+  formatJoinCodeDisplay,
+  normalizeJoinCodeInput,
+} from '@/lib/b2b/join-code';
 import type { CoordinatorOrganizationContext } from '@/lib/b2b/coordinator-types';
 import type { CoordinatorDashboardTab } from '@/lib/coordinator-dashboard/dashboard-tabs';
 import { CoordinatorSidebar } from '@/components/coordinator/CoordinatorSidebar';
@@ -62,7 +77,15 @@ export function CoordinatorDashboardClient({
   profileEmail,
   context,
 }: CoordinatorDashboardClientProps): ReactNode {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
+  const [rotatePending, startRotateTransition] = useTransition();
+  const [rotateConfirmOpen, setRotateConfirmOpen] = useState(false);
+  const [rotateError, setRotateError] = useState<string | null>(null);
+  const [rotateSuccess, setRotateSuccess] = useState<string | null>(null);
+  const [liveJoinCode, setLiveJoinCode] = useState<string | null>(
+    () => context.organization.joinCode,
+  );
 
   const org = context.organization;
   const branchCurrent = useMemo(() => {
@@ -73,22 +96,51 @@ export function CoordinatorDashboardClient({
   }, [context.branches]);
 
   const licenseBadge = licenseBadgeLabel(org.licenseType);
-  const joinCode = org.joinCode?.trim() || '—';
+  useEffect(() => {
+    setLiveJoinCode(context.organization.joinCode);
+  }, [context.organization.joinCode]);
+
+  const joinCodeDisplay = liveJoinCode?.trim()
+    ? formatJoinCodeDisplay(liveJoinCode)
+    : '—';
   const perf = context.orgPerformance;
   const satAvg = perf.avgSatScore;
   const satMax = perf.maxSatScore;
   const ieltsAvg = perf.avgIeltsBand;
 
   const copyJoinCode = useCallback(async () => {
-    if (!org.joinCode?.trim()) return;
+    const raw = liveJoinCode?.trim();
+    if (!raw) return;
+    const payload = formatJoinCodeDisplay(raw);
     try {
-      await navigator.clipboard.writeText(org.joinCode.trim());
+      await navigator.clipboard.writeText(payload);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
       setCopied(false);
     }
-  }, [org.joinCode]);
+  }, [liveJoinCode]);
+
+  function handleRotateJoinCode() {
+    setRotateError(null);
+    setRotateSuccess(null);
+    startRotateTransition(async () => {
+      const result = await rotateCoordinatorJoinCodeAction({
+        organizationId: org.id,
+      });
+      if (!result.success) {
+        setRotateError(result.error);
+        setRotateConfirmOpen(false);
+        return;
+      }
+      const normalized = normalizeJoinCodeInput(result.newJoinCode);
+      setLiveJoinCode(normalized || result.newJoinCode);
+      setRotateConfirmOpen(false);
+      setRotateSuccess('Yeni katılım kodu başarıyla oluşturuldu.');
+      setCopied(false);
+      router.refresh();
+    });
+  }
 
   return (
     <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -281,31 +333,94 @@ export function CoordinatorDashboardClient({
           {activeTab === 'codes' ? (
             <section className="rounded-2xl border border-indigo-400/20 bg-indigo-950/30 p-6 backdrop-blur-sm sm:p-8">
               <h2 className="text-lg font-semibold text-white">
-                Katılım kodları & davet
+                Katılım kodları & davet konsolu
               </h2>
               <p className="mt-1 text-sm text-slate-400">
                 Öğrenciler kuruma bu kod ile bağlanır. Kodu yalnızca kurum
                 içinde paylaşın.
               </p>
+              {rotateSuccess ? (
+                <div
+                  role="status"
+                  className="mt-4 rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+                >
+                  {rotateSuccess}
+                </div>
+              ) : null}
+              {rotateError ? (
+                <div
+                  role="alert"
+                  className="mt-4 rounded-lg border border-rose-400/35 bg-rose-500/10 px-4 py-3 text-sm text-rose-100"
+                >
+                  {rotateError}
+                </div>
+              ) : null}
               <p className="mt-6 text-xs font-medium uppercase tracking-wide text-indigo-200/80">
                 Okul katılım kodu
               </p>
               <p className="mt-2 break-all font-mono text-2xl font-semibold tracking-wide text-white">
-                {joinCode}
+                {joinCodeDisplay}
               </p>
-              <button
-                type="button"
-                onClick={() => void copyJoinCode()}
-                disabled={!org.joinCode?.trim()}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-4 py-2.5 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {copied ? (
-                  <Check className="size-4 text-emerald-300" />
-                ) : (
-                  <ClipboardCopy className="size-4" />
-                )}
-                {copied ? 'Kopyalandı' : 'Kodu kopyala'}
-              </button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void copyJoinCode()}
+                  disabled={!liveJoinCode?.trim() || rotatePending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-4 py-2.5 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {copied ? (
+                    <Check className="size-4 text-emerald-300" />
+                  ) : (
+                    <ClipboardCopy className="size-4" />
+                  )}
+                  {copied ? 'Kopyalandı' : 'Kodu kopyala'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRotateError(null);
+                    setRotateConfirmOpen(true);
+                  }}
+                  disabled={rotatePending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-400/35 bg-amber-500/15 px-4 py-2.5 text-sm font-medium text-amber-100 transition hover:bg-amber-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {rotatePending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <RefreshCw className="size-4" aria-hidden />
+                  )}
+                  Kodu yenile / döndür
+                </button>
+              </div>
+              {rotateConfirmOpen ? (
+                <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-500/10 p-4">
+                  <p className="text-sm leading-relaxed text-amber-50">
+                    Mevcut kod geçersiz olacak; yeni kodu öğrencilerinizle
+                    paylaşmanız gerekecek. Onaylıyor musunuz?
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={rotatePending}
+                      onClick={() => handleRotateJoinCode()}
+                      className="inline-flex items-center gap-2 rounded-md border border-amber-300/40 bg-amber-500/25 px-3 py-2 text-sm font-medium text-amber-50 hover:bg-amber-500/35 disabled:opacity-50"
+                    >
+                      {rotatePending ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : null}
+                      Evet, kodu döndür
+                    </button>
+                    <button
+                      type="button"
+                      disabled={rotatePending}
+                      onClick={() => setRotateConfirmOpen(false)}
+                      className="rounded-md border border-white/15 bg-white/[0.04] px-3 py-2 text-sm text-slate-300 hover:bg-white/[0.08] disabled:opacity-50"
+                    >
+                      Vazgeç
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <p className="mt-6 text-sm leading-relaxed text-slate-400">
                 Öğrenci yolu:{' '}
                 <span className="text-slate-200">

@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/auth';
 import { computeSeatUsage } from '@/lib/b2b/license-quota';
 import {
@@ -7,10 +8,14 @@ import {
   isCoordinatorEligibleOrgRole,
 } from '@/lib/b2b/coordinator-types';
 import { loadCoordinatorOrgAnalytics } from '@/lib/b2b/coordinator-analytics';
+import { generateRandomJoinCode } from '@/lib/b2b/join-code';
 import {
   getStudentProfileDbClient,
   parseTargetScores,
 } from '@/lib/student-profile/load-context';
+import { STRICT_UUID_PATTERN } from '@/lib/uuid-patterns';
+
+const COORDINATOR_PATH = '/coordinator';
 
 export async function getCoordinatorOrganizationContextAction(): Promise<{
   success: boolean;
@@ -258,6 +263,109 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
   } catch (error) {
     console.error(
       '[coordinator] getCoordinatorOrganizationContextAction:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Beklenmeyen bir hata oluştu.' };
+  }
+}
+
+export async function rotateCoordinatorJoinCodeAction(input: {
+  organizationId: string;
+}): Promise<
+  | { success: true; newJoinCode: string }
+  | { success: false; error: string }
+> {
+  try {
+    const orgId = input.organizationId.trim();
+    if (!STRICT_UUID_PATTERN.test(orgId)) {
+      return { success: false, error: 'Geçersiz kurum kimliği.' };
+    }
+
+    const current = await getCurrentProfile();
+    if (!current || current.profile.status !== 'approved') {
+      return { success: false, error: 'Onaylı oturum gerekli.' };
+    }
+
+    const client = await getStudentProfileDbClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const { data: membership, error: memberError } = await client
+      .from('organization_members')
+      .select('id, org_role, organization_id')
+      .eq('user_id', current.user.id)
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (memberError) {
+      console.error(
+        '[coordinator] rotate join_code üyelik:',
+        memberError.message,
+      );
+      return { success: false, error: 'Kurum yetkisi doğrulanamadı.' };
+    }
+
+    const orgRole = (membership as { org_role?: string } | null)?.org_role;
+    if (!membership || !isCoordinatorEligibleOrgRole(orgRole)) {
+      return {
+        success: false,
+        error:
+          'Bu işlem için kurum koordinatörü veya yönetici yetkisi gerekir.',
+      };
+    }
+
+    const { data: orgRow, error: orgError } = await client
+      .from('organizations')
+      .select('id')
+      .eq('id', orgId)
+      .maybeSingle();
+
+    if (orgError || !orgRow) {
+      return { success: false, error: 'Kurum bulunamadı.' };
+    }
+
+    const maxAttempts = 2;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const candidate = generateRandomJoinCode();
+      const { error: updateError } = await client
+        .from('organizations')
+        .update({ join_code: candidate })
+        .eq('id', orgId);
+
+      if (!updateError) {
+        revalidatePath(COORDINATOR_PATH);
+        return { success: true, newJoinCode: candidate };
+      }
+
+      if (updateError.code === '23505' && attempt < maxAttempts - 1) {
+        continue;
+      }
+
+      if (updateError.code === '42703') {
+        return {
+          success: false,
+          error:
+            'join_code kolonu veritabanında tanımlı değil. Migration uygulayın.',
+        };
+      }
+
+      console.error(
+        '[coordinator] join_code döndürme:',
+        updateError.message,
+        updateError.code,
+      );
+      return { success: false, error: 'Katılım kodu güncellenemedi.' };
+    }
+
+    return {
+      success: false,
+      error: 'Benzersiz katılım kodu üretilemedi. Tekrar deneyin.',
+    };
+  } catch (error) {
+    console.error(
+      '[coordinator] rotateCoordinatorJoinCodeAction:',
       error instanceof Error ? error.message : String(error),
     );
     return { success: false, error: 'Beklenmeyen bir hata oluştu.' };
