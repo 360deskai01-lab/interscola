@@ -38,7 +38,7 @@ export function readExamSessionRecovery(
     const deadlineAt =
       typeof parsed.deadlineAt === 'number' && Number.isFinite(parsed.deadlineAt)
         ? parsed.deadlineAt
-        : Date.now();
+        : 0;
     return {
       version: STORAGE_VERSION,
       answers,
@@ -115,6 +115,14 @@ export function resolveExamSessionRecoveryTiming(
 ): ExamSessionRecoveryTiming {
   const fallbackDeadline = nowMs + officialTotalSeconds * 1000;
   if (!recovered) {
+    return {
+      trustRecoverySnapshot: false,
+      sessionSeconds: officialTotalSeconds,
+      deadlineAt: fallbackDeadline,
+    };
+  }
+
+  if (recovered.deadlineAt <= nowMs) {
     return {
       trustRecoverySnapshot: false,
       sessionSeconds: officialTotalSeconds,

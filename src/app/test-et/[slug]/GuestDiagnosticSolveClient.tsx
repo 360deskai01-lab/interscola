@@ -44,20 +44,23 @@ export function GuestDiagnosticSolveClient({
     [exam],
   );
 
-  const [secondsLeft, setSecondsLeft] = useState(officialDurationSeconds);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [isTimerReady, setIsTimerReady] = useState(false);
 
   useEffect(() => {
     setSecondsLeft(officialDurationSeconds);
+    setIsTimerReady(officialDurationSeconds > 0);
   }, [officialDurationSeconds]);
 
   const isTimeUp = secondsLeft <= 0;
 
   useEffect(() => {
+    if (!isTimerReady) return;
     const timer = window.setInterval(() => {
       setSecondsLeft((value) => (value > 0 ? value - 1 : 0));
     }, 1000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isTimerReady]);
 
   const finishAndNavigate = useCallback(() => {
     if (hasAutoSubmittedRef.current) return;
@@ -75,11 +78,15 @@ export function GuestDiagnosticSolveClient({
   }, [answers, exam, router, slug]);
 
   useEffect(() => {
+    if (!isTimerReady) return;
+    if (phase !== 'exam') return;
     if (secondsLeft > 0) return;
     if (hasAutoSubmittedRef.current) return;
+
     timedOutSubmitRef.current = true;
+    hasAutoSubmittedRef.current = true;
     finishAndNavigate();
-  }, [finishAndNavigate, secondsLeft]);
+  }, [finishAndNavigate, isTimerReady, phase, secondsLeft]);
 
   const onAnswer = useCallback(
     (questionId: string, answer: string) => {
@@ -141,8 +148,12 @@ export function GuestDiagnosticSolveClient({
     );
   }
 
-  if (!question) {
-    return null;
+  if (!isTimerReady || !question) {
+    return (
+      <div className="grid place-items-center py-24">
+        <Loader2 className="size-10 animate-spin text-indigo-300" />
+      </div>
+    );
   }
 
   return (

@@ -97,6 +97,7 @@ export function StudentAssignmentExamClient({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [isTimerReady, setIsTimerReady] = useState(false);
   const [finishedFast, setFinishedFast] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completionWarning, setCompletionWarning] = useState<string | null>(
@@ -156,6 +157,10 @@ export function StudentAssignmentExamClient({
       deadlineRef.current = timing.deadlineAt;
       setSecondsLeft(timing.sessionSeconds);
     }
+
+    if (timing.sessionSeconds > 0) {
+      setIsTimerReady(true);
+    }
   }, [assignmentId, exam]);
 
   useEffect(() => {
@@ -199,6 +204,7 @@ export function StudentAssignmentExamClient({
     const totalSeconds = resolveExamSessionDurationSeconds(exam);
     deadlineRef.current = Date.now() + totalSeconds * 1000;
     setSecondsLeft(totalSeconds);
+    setIsTimerReady(totalSeconds > 0);
     setPhase('exam');
   }, [
     assignmentId,
@@ -325,13 +331,14 @@ export function StudentAssignmentExamClient({
   }, [phase]);
 
   useEffect(() => {
+    if (!isTimerReady) return;
     if (phase !== 'exam') return;
     if (secondsLeft > 0) return;
     if (hasAutoSubmittedRef.current) return;
 
     hasAutoSubmittedRef.current = true;
     void finishExam();
-  }, [finishExam, phase, secondsLeft]);
+  }, [finishExam, isTimerReady, phase, secondsLeft]);
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-slate-950 text-slate-100">
@@ -409,7 +416,13 @@ export function StudentAssignmentExamClient({
           </div>
         ) : null}
 
-        {phase === 'exam' && question ? (
+        {phase === 'exam' && !isTimerReady ? (
+          <div className="grid place-items-center py-24">
+            <Loader2 className="size-10 animate-spin text-violet-300" />
+          </div>
+        ) : null}
+
+        {phase === 'exam' && isTimerReady && question ? (
           <ExamRunner
             exam={exam}
             question={question}
