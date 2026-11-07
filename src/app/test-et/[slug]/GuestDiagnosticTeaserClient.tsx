@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Lock, Trophy } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 
+import { ExamResultTimedOutBanner } from '@/components/exam/ExamResultCard';
 import {
   readGuestDiagnosticFromStorage,
   type GuestDiagnosticRecord,
@@ -44,6 +45,7 @@ export function GuestDiagnosticTeaserClient({
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 pb-16">
+      {record.is_timed_out ? <ExamResultTimedOutBanner /> : null}
       <div className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/15 via-indigo-500/10 to-violet-500/10 p-8 text-center">
         <div className="mx-auto grid size-16 place-items-center rounded-2xl border border-emerald-300/40 bg-emerald-500/20">
           <Trophy className="size-8 text-emerald-200" aria-hidden />

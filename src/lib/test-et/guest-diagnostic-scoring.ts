@@ -128,8 +128,9 @@ export function scoreGuestDiagnostic(params: {
   exam: AssessmentPayload;
   answers: Record<string, string>;
   slug: TestEtSlug;
+  is_timed_out?: boolean;
 }): GuestDiagnosticRecord {
-  const { exam, answers, slug } = params;
+  const { exam, answers, slug, is_timed_out = false } = params;
   const curriculum = exam.curriculum;
   const breakdown = buildQuestionBreakdown(exam, answers);
 
@@ -183,6 +184,7 @@ export function scoreGuestDiagnostic(params: {
     headlineScore,
     summary,
     answers,
+    is_timed_out,
     lockedTeaser: {
       questionBreakdown: breakdown,
       rubricBreakdown: buildRubricTeaser(curriculum, exam, answers),

@@ -22,6 +22,21 @@ export function ExamResultScoreHeading({
   );
 }
 
+export function ExamResultTimedOutBanner(): ReactNode {
+  return (
+    <div
+      role="status"
+      className="mb-6 rounded-2xl border border-rose-400/45 bg-gradient-to-r from-rose-500/20 via-amber-500/10 to-rose-500/15 px-5 py-4 text-center text-sm font-semibold text-rose-100 shadow-lg shadow-rose-950/30"
+    >
+      ⏱️ Zaman Aşımı (Süresinde Yetiştirilemedi)
+      <p className="mt-1 text-xs font-normal text-rose-100/85">
+        Yanıtların süre bitiminde otomatik gönderildi. Bir sonraki denemede
+        soru başına süre planlamayı dene.
+      </p>
+    </div>
+  );
+}
+
 export function ExamResultTransparencyFootnote({
   curriculum,
   engineType,

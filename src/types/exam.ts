@@ -38,4 +38,6 @@ export interface EvaluationResult {
   metricBreakdown: Record<string, number | string>;
   feedback: string;
   remedialTopics: string[];
+  /** Süre dolumu ile otomatik gönderim (istemci anotasyonu). */
+  is_timed_out?: boolean;
 }

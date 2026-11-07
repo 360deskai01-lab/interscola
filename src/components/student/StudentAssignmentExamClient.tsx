@@ -212,44 +212,83 @@ export function StudentAssignmentExamClient({
     if (isFinishingRef.current) return;
     isFinishingRef.current = true;
     setIsFinishing(true);
+
+    const secondsAtFinish = secondsLeft;
+    const timedOutSubmit =
+      secondsAtFinish <= 0 || hasAutoSubmittedRef.current;
+
+    if (timedOutSubmit) {
+      setSecondsLeft(0);
+    }
+
     lockExamTimer();
     clearExamSessionRecovery(assignmentId);
 
     const totalSeconds = resolveExamSessionDurationSeconds(exam);
-    setFinishedFast(secondsLeft > totalSeconds / 2);
+    setFinishedFast(
+      !timedOutSubmit && secondsAtFinish > totalSeconds / 2,
+    );
 
     setError(null);
     setPhase('grading');
 
-    try {
-      const payload = await postJson('/api/grade-exam', {
-        exam,
-        studentAnswers: answers,
-        assignmentId,
-      });
-      setEvaluation(pickEvaluation(payload));
+    const gradeAttempts = 2;
 
-      const completeResult = await onCompleteAssignment(assignmentId);
-      if (!completeResult.success) {
-        setCompletionWarning(
-          completeResult.error ??
-            'Karne hazır; ödev durumu panelde gecikmeli güncellenebilir.',
-        );
+    for (let attempt = 0; attempt < gradeAttempts; attempt += 1) {
+      try {
+        const payload = await postJson('/api/grade-exam', {
+          exam,
+          studentAnswers: answers,
+          assignmentId,
+        });
+        const graded = pickEvaluation(payload);
+        setEvaluation({
+          ...graded,
+          is_timed_out: timedOutSubmit,
+        });
+
+        const completeResult = await onCompleteAssignment(assignmentId);
+        if (!completeResult.success) {
+          setCompletionWarning(
+            completeResult.error ??
+              'Karne hazır; ödev durumu panelde gecikmeli güncellenebilir.',
+          );
+        }
+
+        setPhase('results');
+        return;
+      } catch (caught) {
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : 'Değerlendirme sırasında bir sorun oluştu.';
+
+        if (attempt < gradeAttempts - 1) {
+          setError(`${message} Yeniden deneniyor…`);
+          continue;
+        }
+
+        setError(message);
+
+        if (timedOutSubmit) {
+          setSecondsLeft(0);
+          setPhase('grading');
+          return;
+        }
+
+        if (secondsAtFinish >= 60) {
+          deadlineRef.current = Date.now() + secondsAtFinish * 1000;
+          setSecondsLeft(secondsAtFinish);
+          isFinishingRef.current = false;
+          setIsFinishing(false);
+          hasAutoSubmittedRef.current = false;
+          setPhase('exam');
+          return;
+        }
+
+        setSecondsLeft(0);
+        setPhase('grading');
       }
-
-      setPhase('results');
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : 'Değerlendirme sırasında bir sorun oluştu.',
-      );
-      const resumeSeconds = Math.max(15, secondsLeft);
-      deadlineRef.current = Date.now() + resumeSeconds * 1000;
-      setSecondsLeft(resumeSeconds);
-      isFinishingRef.current = false;
-      setIsFinishing(false);
-      setPhase('exam');
     }
   }, [
     answers,
@@ -353,8 +392,16 @@ export function StudentAssignmentExamClient({
         {phase === 'grading' ? (
           <div className="grid place-items-center py-24">
             <div className="flex flex-col items-center gap-5 text-center">
-              <Loader2 className="size-10 animate-spin text-violet-300" />
-              <p className="text-lg font-semibold">Yanıtların değerlendiriliyor</p>
+              {error ? (
+                <p className="max-w-md text-sm text-rose-200">{error}</p>
+              ) : (
+                <>
+                  <Loader2 className="size-10 animate-spin text-violet-300" />
+                  <p className="text-lg font-semibold">
+                    Yanıtların değerlendiriliyor
+                  </p>
+                </>
+              )}
             </div>
           </div>
         ) : null}

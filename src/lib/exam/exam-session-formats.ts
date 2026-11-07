@@ -17,6 +17,8 @@ export const MINI_MOCK_QUESTIONS: Record<CurriculumCode, number> = {
 
 /** IELTS / CAIE diagnostic yazma görevleri için taban süre. */
 export const DIAGNOSTIC_DRILL_DURATION_MINUTES = 15;
+/** CAIE / A-Level teşhis için mutlak alt süre (dakika). */
+export const CAIE_DIAGNOSTIC_ABSOLUTE_MIN_MINUTES = 12;
 /** Digital SAT diagnostic (3–5 soru) taban süre. */
 export const DIAGNOSTIC_DRILL_SAT_DURATION_MINUTES = 8;
 export const MINI_MOCK_DURATION_MINUTES = 18;
@@ -76,6 +78,14 @@ export function minimumDurationMinutesForSession(
 
 const MAX_MINUTES_BEFORE_SECONDS_HEURISTIC = 90;
 
+function applyCaieDiagnosticDurationFloor(
+  exam: AssessmentPayload,
+  seconds: number,
+): number {
+  if (exam.curriculum !== 'CAIE') return seconds;
+  return Math.max(seconds, CAIE_DIAGNOSTIC_ABSOLUTE_MIN_MINUTES * 60);
+}
+
 /**
  * `durationMinutes` alanını saniyeye çevirir; taban süre kalkanı ve birim karışıklığı koruması.
  */
@@ -88,23 +98,26 @@ export function resolveExamSessionDurationSeconds(
 
   let minutes = exam.durationMinutes;
   if (!Number.isFinite(minutes) || minutes <= 0) {
-    return minSeconds;
+    return applyCaieDiagnosticDurationFloor(exam, minSeconds);
   }
 
   minutes = Math.trunc(minutes);
 
   // durationMinutes alanına saniye yazılmış (ör. 15 sn) veya tabanın altında kalmış değer.
   if (minutes < minMinutes && minutes <= MAX_MINUTES_BEFORE_SECONDS_HEURISTIC) {
-    return minSeconds;
+    return applyCaieDiagnosticDurationFloor(exam, minSeconds);
   }
 
   // Saniye değeri dakika alanına sığmış (ör. 900 = 15 dk).
   if (minutes > 600) {
-    return Math.max(minSeconds, minutes);
+    return applyCaieDiagnosticDurationFloor(
+      exam,
+      Math.max(minSeconds, minutes),
+    );
   }
 
   const effectiveMinutes = Math.max(minutes, minMinutes);
-  return effectiveMinutes * 60;
+  return applyCaieDiagnosticDurationFloor(exam, effectiveMinutes * 60);
 }
 
 export function sessionFormatTitlePrefix(

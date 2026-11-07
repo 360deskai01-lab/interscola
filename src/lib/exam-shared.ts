@@ -263,6 +263,15 @@ export function buildBadges(
     },
   ];
 
+  if (evaluation.is_timed_out) {
+    badges.unshift({
+      id: 'timed-out',
+      emoji: '⏱️',
+      label: 'Zaman Aşımı (Süresinde Yetiştirilemedi)',
+      hint: 'Süre dolduğu için yanıtların otomatik gönderildi. Zaman yönetimi pratiği önerilir.',
+    });
+  }
+
   if (isHighScore(engineType, evaluation)) {
     badges.push({
       id: 'high-flyer',
@@ -272,7 +281,7 @@ export function buildBadges(
     });
   }
 
-  if (fastFinish) {
+  if (fastFinish && !evaluation.is_timed_out) {
     badges.push({
       id: 'speed-demon',
       emoji: '⚡',

@@ -23,6 +23,7 @@ export type GuestDiagnosticRecord = {
   headlineScore: string;
   summary: string;
   answers: Record<string, string>;
+  is_timed_out?: boolean;
   lockedTeaser: {
     questionBreakdown: GuestDiagnosticQuestionBreakdown[];
     rubricBreakdown: GuestDiagnosticRubricLine[];

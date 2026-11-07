@@ -22,6 +22,7 @@ import {
 } from '@/lib/exam-shared';
 import {
   ExamResultScoreHeading,
+  ExamResultTimedOutBanner,
   ExamResultTransparencyFootnote,
 } from '@/components/exam/ExamResultCard';
 import { inferSessionFormat, sessionFormatUiLabel } from '@/lib/exam/exam-session-formats';
@@ -88,6 +89,7 @@ export function ExamResults({
       exit={{ opacity: 0, y: -22 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
+      {evaluation.is_timed_out ? <ExamResultTimedOutBanner /> : null}
       <GlassCard className="relative overflow-hidden p-8 text-center sm:p-10">
         {high ? (
           <motion.div

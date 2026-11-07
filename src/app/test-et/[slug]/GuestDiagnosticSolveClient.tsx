@@ -9,13 +9,17 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { Loader2 } from 'lucide-react';
 
 import { ExamRunner } from '@/components/exam/ExamRunner';
+import { ExamResultTimedOutBanner } from '@/components/exam/ExamResultCard';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
 import { scoreGuestDiagnostic } from '@/lib/test-et/guest-diagnostic-scoring';
 import { writeGuestDiagnosticToStorage } from '@/lib/test-et/guest-diagnostic-storage';
 import { testEtHref, type TestEtSlug } from '@/lib/test-et/test-et-config';
 import type { AssessmentPayload } from '@/types/exam';
+
+type GuestSolvePhase = 'exam' | 'submitting';
 
 interface GuestDiagnosticSolveClientProps {
   exam: AssessmentPayload;
@@ -28,10 +32,11 @@ export function GuestDiagnosticSolveClient({
 }: GuestDiagnosticSolveClientProps): ReactNode {
   const router = useRouter();
   const hasAutoSubmittedRef = useRef(false);
+  const timedOutSubmitRef = useRef(false);
+  const [phase, setPhase] = useState<GuestSolvePhase>('exam');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const officialDurationSeconds = useMemo(
     () => resolveExamSessionDurationSeconds(exam),
@@ -56,8 +61,14 @@ export function GuestDiagnosticSolveClient({
   const finishAndNavigate = useCallback(() => {
     if (hasAutoSubmittedRef.current) return;
     hasAutoSubmittedRef.current = true;
-    setIsSubmitting(true);
-    const record = scoreGuestDiagnostic({ exam, answers, slug });
+    setPhase('submitting');
+
+    const record = scoreGuestDiagnostic({
+      exam,
+      answers,
+      slug,
+      is_timed_out: timedOutSubmitRef.current,
+    });
     writeGuestDiagnosticToStorage(record);
     router.push(`${testEtHref(slug)}/results`);
   }, [answers, exam, router, slug]);
@@ -65,15 +76,16 @@ export function GuestDiagnosticSolveClient({
   useEffect(() => {
     if (secondsLeft > 0) return;
     if (hasAutoSubmittedRef.current) return;
+    timedOutSubmitRef.current = true;
     finishAndNavigate();
   }, [finishAndNavigate, secondsLeft]);
 
   const onAnswer = useCallback(
     (questionId: string, answer: string) => {
-      if (secondsLeft <= 0 || isSubmitting) return;
+      if (secondsLeft <= 0 || phase !== 'exam') return;
       setAnswers((prev) => ({ ...prev, [questionId]: answer }));
     },
-    [isSubmitting, secondsLeft],
+    [phase, secondsLeft],
   );
 
   const totalQuestions = exam.questions.length;
@@ -84,6 +96,7 @@ export function GuestDiagnosticSolveClient({
     setDirection(index > currentIndex ? 1 : -1);
     setCurrentIndex(index);
   }
+
   const requiresEveryAnswer =
     exam.engineType === 'LANGUAGE' || exam.engineType === 'RUBRIC_ESSAY';
 
@@ -104,7 +117,27 @@ export function GuestDiagnosticSolveClient({
   );
 
   function onFinish() {
+    timedOutSubmitRef.current = secondsLeft <= 0;
     finishAndNavigate();
+  }
+
+  if (phase === 'submitting') {
+    return (
+      <div className="space-y-4 py-16">
+        {timedOutSubmitRef.current ? <ExamResultTimedOutBanner /> : null}
+        <div
+          role="status"
+          className="flex flex-col items-center gap-4 text-center"
+        >
+          <Loader2 className="size-10 animate-spin text-indigo-300" />
+          <p className="text-sm font-medium text-slate-200">
+            {timedOutSubmitRef.current
+              ? 'Süreniz doldu — yanıtlarınız kaydediliyor ve puanınız hesaplanıyor…'
+              : 'Yanıtlarınız kaydediliyor…'}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!question) {
@@ -136,8 +169,8 @@ export function GuestDiagnosticSolveClient({
         onNavigate={onNavigate}
         onFinish={onFinish}
         finishLabel="Sınavı Tamamla & Puanımı Gör"
-        finishDisabled={isSubmitting || isTimeUp}
-        isGrading={isSubmitting}
+        finishDisabled={isTimeUp}
+        isGrading={isTimeUp}
       />
     </>
   );
