@@ -14,6 +14,7 @@ import { Loader2 } from 'lucide-react';
 import { ExamRunner } from '@/components/exam/ExamRunner';
 import { ExamResultTimedOutBanner } from '@/components/exam/ExamResultCard';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
+import { buildStudentAnswersPayload } from '@/lib/exam/student-answers-payload';
 import { scoreGuestDiagnostic } from '@/lib/test-et/guest-diagnostic-scoring';
 import { writeGuestDiagnosticToStorage } from '@/lib/test-et/guest-diagnostic-storage';
 import { testEtHref, type TestEtSlug } from '@/lib/test-et/test-et-config';
@@ -65,7 +66,7 @@ export function GuestDiagnosticSolveClient({
 
     const record = scoreGuestDiagnostic({
       exam,
-      answers,
+      answers: buildStudentAnswersPayload(exam, answers),
       slug,
       is_timed_out: timedOutSubmitRef.current,
     });
@@ -146,9 +147,9 @@ export function GuestDiagnosticSolveClient({
 
   return (
     <>
-      {isTimeUp ? (
+      {isTimeUp && phase === 'exam' ? (
         <div
-          role="alert"
+          role="status"
           className="mb-4 rounded-2xl border border-rose-400/40 bg-rose-500/15 px-4 py-3 text-center text-sm font-medium text-rose-100"
         >
           ⏳ Süreniz Doldu! Yanıtlarınız kaydediliyor ve puanınız hesaplanıyor...

@@ -26,6 +26,7 @@ import {
   writeExamSessionRecovery,
 } from '@/lib/exam/exam-session-recovery';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
+import { buildStudentAnswersPayload } from '@/lib/exam/student-answers-payload';
 import { ExamResults } from '@/components/exam/ExamResults';
 import { ExamRunner } from '@/components/exam/ExamRunner';
 import { ErrorCard, GlowOrb } from '@/components/exam/ui';
@@ -236,12 +237,14 @@ export function StudentAssignmentExamClient({
 
     for (let attempt = 0; attempt < gradeAttempts; attempt += 1) {
       try {
+        const studentAnswers = buildStudentAnswersPayload(exam, answers);
         const payload = await postJson('/api/grade-exam', {
           exam,
-          studentAnswers: answers,
+          studentAnswers,
           assignmentId,
         });
         const graded = pickEvaluation(payload);
+        setError(null);
         setEvaluation({
           ...graded,
           is_timed_out: timedOutSubmit,

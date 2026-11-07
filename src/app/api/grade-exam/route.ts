@@ -374,6 +374,9 @@ function parseExam(raw: unknown): AssessmentPayload {
 }
 
 function parseStudentAnswers(raw: unknown): Record<string, string> {
+  if (raw === undefined || raw === null) {
+    return {};
+  }
   if (!isRecord(raw)) {
     throw new RequestValidationError('"studentAnswers" bir nesne olmalıdır.');
   }
@@ -382,13 +385,120 @@ function parseStudentAnswers(raw: unknown): Record<string, string> {
     (entry): entry is [string, string] => typeof entry[1] === 'string',
   );
 
-  if (entries.length === 0) {
-    throw new RequestValidationError(
-      'studentAnswers en az bir yanıt içermelidir.',
-    );
+  return Object.fromEntries(entries);
+}
+
+function normalizeStudentAnswersForExam(
+  exam: AssessmentPayload,
+  studentAnswers: Record<string, string>,
+): Record<string, string> {
+  const normalized: Record<string, string> = { ...studentAnswers };
+  for (const question of exam.questions) {
+    if (typeof normalized[question.id] !== 'string') {
+      normalized[question.id] = '';
+    }
+  }
+  return normalized;
+}
+
+function hasSubstantiveStudentAnswer(
+  exam: AssessmentPayload,
+  studentAnswers: Record<string, string>,
+): boolean {
+  return exam.questions.some((question) =>
+    Boolean(optionalString(studentAnswers[question.id])),
+  );
+}
+
+function evaluationForUnansweredExam(exam: AssessmentPayload): EvaluationResult {
+  const remedialTopics = exam.questions.map(
+    (question) =>
+      `Soru ${question.questionNumber} yanıtsız — süre doldu veya boş bırakıldı. ${truncate(question.prompt, 80)}`,
+  );
+  const feedback =
+    'Hiçbir soruya yanıt verilmedi. Ham puan 0 (%0) olarak kaydedildi; ' +
+    'bir sonraki denemede süre planlamayı ve ilk sorulara erken başlamayı dene.';
+
+  if (exam.engineType === 'OBJECTIVE') {
+    const mcqCount = exam.questions.filter(
+      (question) => question.type === 'multiple_choice',
+    ).length;
+    return {
+      score: 0,
+      maxScore: SAT_MAX_SCORE,
+      scaledResult: `0 / ${SAT_MAX_SCORE}`,
+      metricBreakdown: {
+        dogru: 0,
+        yanlis: 0,
+        bos: mcqCount > 0 ? mcqCount : exam.questions.length,
+        dogrulukYuzdesi: 0,
+      },
+      feedback,
+      remedialTopics,
+    };
   }
 
-  return Object.fromEntries(entries);
+  if (exam.engineType === 'RUBRIC_ESSAY' || exam.curriculum === 'CAIE') {
+    const mcqCount = exam.questions.filter(
+      (question) => question.type === 'multiple_choice',
+    ).length;
+    return {
+      score: 0,
+      maxScore: exam.totalMarks,
+      scaledResult: 'Grade U',
+      metricBreakdown: {
+        [AO_LABELS.ao1_knowledge]: 0,
+        [AO_LABELS.ao2_application]: 0,
+        [AO_LABELS.ao3_evaluation]: 0,
+        yuzde: 0,
+        ...(mcqCount > 0
+          ? { mcqDogru: 0, mcqYanlis: 0, mcqBos: mcqCount }
+          : {}),
+      },
+      feedback,
+      remedialTopics,
+    };
+  }
+
+  const metricBreakdown: Record<string, number> = { genelBand: 1, yuzde: 0 };
+  for (const key of IELTS_KEYS) {
+    metricBreakdown[IELTS_LABELS[key]] = IELTS_MIN_BAND;
+  }
+
+  return {
+    score: IELTS_MIN_BAND,
+    maxScore: IELTS_MAX_BAND,
+    scaledResult: `Band ${IELTS_MIN_BAND.toFixed(1)}`,
+    metricBreakdown,
+    feedback,
+    remedialTopics,
+  };
+}
+
+async function respondGradedExam(
+  exam: AssessmentPayload,
+  studentAnswers: Record<string, string>,
+  evaluation: EvaluationResult,
+  studentId: string | null,
+  linkedAssignmentId: string | null,
+): Promise<NextResponse> {
+  const attemptId = await persistAttempt(
+    exam,
+    studentAnswers,
+    evaluation,
+    studentId,
+    linkedAssignmentId,
+  );
+
+  if (linkedAssignmentId && studentId) {
+    await markAssignmentCompleted(linkedAssignmentId, studentId);
+  }
+
+  return NextResponse.json({
+    success: true,
+    evaluation,
+    ...(attemptId ? { attemptId } : {}),
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1410,7 +1520,10 @@ export async function POST(request: NextRequest) {
       throw new RequestValidationError('İstek gövdesi bir nesne olmalıdır.');
     }
     exam = parseExam(body.exam);
-    studentAnswers = parseStudentAnswers(body.studentAnswers);
+    studentAnswers = normalizeStudentAnswersForExam(
+      exam,
+      parseStudentAnswers(body.studentAnswers),
+    );
     assignmentId = parseOptionalAssignmentId(body.assignmentId);
   } catch (error) {
     if (error instanceof SyntaxError) {
@@ -1444,28 +1557,21 @@ export async function POST(request: NextRequest) {
     linkedAssignmentId = assignmentId;
   }
 
+  const unansweredSubmission = !hasSubstantiveStudentAnswer(exam, studentAnswers);
+
   // OBJECTIVE yolu deterministiktir: API anahtarı ve yapay zekâ çağrısı gerekmez.
   if (exam.engineType === 'OBJECTIVE') {
     try {
-      const evaluation = gradeObjective(exam, studentAnswers);
-      // Kayıt başarısız olsa da yanıt döner; persistAttempt asla throw etmez.
-      const attemptId = await persistAttempt(
+      const evaluation = unansweredSubmission
+        ? evaluationForUnansweredExam(exam)
+        : gradeObjective(exam, studentAnswers);
+      return respondGradedExam(
         exam,
         studentAnswers,
         evaluation,
         studentId,
         linkedAssignmentId,
       );
-
-      if (linkedAssignmentId && studentId) {
-        await markAssignmentCompleted(linkedAssignmentId, studentId);
-      }
-
-      return NextResponse.json({
-        success: true,
-        evaluation,
-        ...(attemptId ? { attemptId } : {}),
-      });
     } catch (error) {
       if (error instanceof RequestValidationError) {
         return errorResponse(error.message, 400);
@@ -1476,6 +1582,16 @@ export async function POST(request: NextRequest) {
         500,
       );
     }
+  }
+
+  if (unansweredSubmission) {
+    return respondGradedExam(
+      exam,
+      studentAnswers,
+      evaluationForUnansweredExam(exam),
+      studentId,
+      linkedAssignmentId,
+    );
   }
 
   const apiKey = process.env.GEMINI_API_KEY;
@@ -1494,24 +1610,13 @@ export async function POST(request: NextRequest) {
         ? await gradeRubricEssay(ai, exam, studentAnswers)
         : await gradeLanguage(ai, exam, studentAnswers);
 
-    // Kayıt başarısız olsa da değerlendirme yanıtı döner; persistAttempt asla throw etmez.
-    const attemptId = await persistAttempt(
+    return respondGradedExam(
       exam,
       studentAnswers,
       evaluation,
       studentId,
       linkedAssignmentId,
     );
-
-    if (linkedAssignmentId && studentId) {
-      await markAssignmentCompleted(linkedAssignmentId, studentId);
-    }
-
-    return NextResponse.json({
-      success: true,
-      evaluation,
-      ...(attemptId ? { attemptId } : {}),
-    });
   } catch (error) {
     if (error instanceof RequestValidationError) {
       return errorResponse(error.message, 400);
