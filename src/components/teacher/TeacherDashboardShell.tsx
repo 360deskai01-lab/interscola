@@ -25,6 +25,7 @@ import type {
   CreateTeacherAssignmentInput,
   TeacherAssignmentStudentOption,
 } from '@/lib/b2b/teacher-assignment-actions';
+import type { TeacherAssignmentReviewDetail } from '@/lib/b2b/teacher-assignment-review-types';
 import type { TeacherAssignSubmitResult } from '@/components/teacher/TeacherAssignFromLibraryModal';
 
 export interface TeacherDashboardShellProps {
@@ -76,6 +77,11 @@ export interface TeacherDashboardShellProps {
   onCreateTeacherAssignment: (
     input: CreateTeacherAssignmentInput,
   ) => Promise<TeacherAssignSubmitResult>;
+  onGetAssignmentReview: (assignmentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: TeacherAssignmentReviewDetail;
+  }>;
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,

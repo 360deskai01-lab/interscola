@@ -38,6 +38,7 @@ import { UNREAD_GENERAL_AGGREGATE_KEY } from '@/lib/message-unread-scopes';
 import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
 import {
   createTeacherAssignmentFormAction,
+  getTeacherAssignmentReviewDetailFormAction,
   getTeacherAssignmentStudentPoolAction,
 } from '@/lib/b2b/teacher-assignment-actions';
 
@@ -196,6 +197,9 @@ export default async function TeacherDashboardPage({
           onGenerateExamFromLibrary={generateExamFromLibraryFormAction}
           onLoadLibraryAssignmentHistory={getLibraryAssignmentHistoryFormAction}
           onCreateTeacherAssignment={createTeacherAssignmentFormAction}
+          onGetAssignmentReview={(assignmentId) =>
+            getTeacherAssignmentReviewDetailFormAction({ assignmentId })
+          }
           onLoadConversation={getConversationFormAction}
           onSendMessage={sendMessageFormAction}
           onMarkMessagesRead={markMessagesAsReadFormAction}

@@ -19,6 +19,8 @@ import type {
   CreateTeacherAssignmentInput,
   TeacherAssignmentStudentOption,
 } from '@/lib/b2b/teacher-assignment-actions';
+import type { TeacherAssignmentReviewDetail } from '@/lib/b2b/teacher-assignment-review-types';
+import { TeacherAssignmentReviewDrawer } from '@/components/teacher/TeacherAssignmentReviewDrawer';
 import {
   TeacherAssignFromLibraryModal,
   type TeacherAssignSubmitResult,
@@ -35,6 +37,11 @@ interface TeacherAssignmentsProgressSectionProps {
   onCreateTeacherAssignment: (
     input: CreateTeacherAssignmentInput,
   ) => Promise<TeacherAssignSubmitResult>;
+  onGetAssignmentReview: (assignmentId: string) => Promise<{
+    success: boolean;
+    error?: string;
+    data?: TeacherAssignmentReviewDetail;
+  }>;
   unreadByAssignment: Record<string, number>;
   onLoadConversation: (
     partnerId: string,
@@ -154,6 +161,7 @@ export function TeacherAssignmentsProgressSection({
   libraryItems,
   assignmentStudentPool,
   onCreateTeacherAssignment,
+  onGetAssignmentReview,
   unreadByAssignment,
   onLoadConversation,
   onSendMessage,
@@ -172,6 +180,12 @@ export function TeacherAssignmentsProgressSection({
   const [toast, setToast] = useState<string | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [reviewPending, startReviewTransition] = useTransition();
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false);
+  const [reviewLoadingId, setReviewLoadingId] = useState<string | null>(null);
+  const [reviewDetail, setReviewDetail] =
+    useState<TeacherAssignmentReviewDetail | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const studentOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -203,6 +217,23 @@ export function TeacherAssignmentsProgressSection({
   function handleRefresh() {
     startTransition(() => {
       router.refresh();
+    });
+  }
+
+  function openAssignmentReview(row: TeacherAssignmentProgressRow) {
+    if (row.status !== 'completed') return;
+    setReviewDrawerOpen(true);
+    setReviewDetail(null);
+    setReviewError(null);
+    setReviewLoadingId(row.assignmentId);
+    startReviewTransition(async () => {
+      const result = await onGetAssignmentReview(row.assignmentId);
+      setReviewLoadingId(null);
+      if (!result.success || !result.data) {
+        setReviewError(result.error ?? 'Karne detayı yüklenemedi.');
+        return;
+      }
+      setReviewDetail(result.data);
     });
   }
 
@@ -363,7 +394,7 @@ export function TeacherAssignmentsProgressSection({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[750px] text-left text-sm">
+            <table className="w-full min-w-[860px] border-collapse text-left text-sm">
               <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th className="px-4 py-3 font-medium sm:px-6">Öğrenci</th>
@@ -373,6 +404,9 @@ export function TeacherAssignmentsProgressSection({
                   <th className="px-4 py-3 font-medium sm:px-6">Durum</th>
                   <th className="px-4 py-3 font-medium sm:px-6">
                     Sınav Notu / Sonuç
+                  </th>
+                  <th className="min-w-[120px] whitespace-nowrap px-4 py-3 text-right font-medium sm:px-6">
+                    İncele
                   </th>
                   <th className="min-w-[110px] pr-4 pl-4 text-right font-medium sm:px-6">
                     İletişim
@@ -420,6 +454,31 @@ export function TeacherAssignmentsProgressSection({
                       </td>
                       <td className="px-4 py-4 sm:px-6">
                         {examResultBadge(row.examResult)}
+                      </td>
+                      <td className="min-w-[120px] whitespace-nowrap px-4 py-4 text-right sm:px-6">
+                        {row.status === 'completed' ? (
+                          <button
+                            type="button"
+                            onClick={() => openAssignmentReview(row)}
+                            disabled={
+                              reviewPending &&
+                              reviewLoadingId === row.assignmentId
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-50 transition hover:bg-indigo-500/30 disabled:opacity-50"
+                          >
+                            {reviewPending &&
+                            reviewLoadingId === row.assignmentId ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <span aria-hidden>📊</span>
+                            )}
+                            İncele / sonuç
+                          </button>
+                        ) : (
+                          <span className="inline-flex rounded-md border border-slate-600/40 bg-slate-800/50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
+                            Bekleniyor
+                          </span>
+                        )}
                       </td>
                       <td className="min-w-[110px] px-4 py-4 pr-4 text-right sm:px-6 sm:pr-4">
                         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -479,6 +538,19 @@ export function TeacherAssignmentsProgressSection({
         onLoadConversation={onLoadConversation}
         onSendMessage={onSendMessage}
         onMarkRead={onMarkMessagesRead}
+      />
+
+      <TeacherAssignmentReviewDrawer
+        open={reviewDrawerOpen}
+        loading={reviewPending}
+        error={reviewError}
+        detail={reviewDetail}
+        onClose={() => {
+          setReviewDrawerOpen(false);
+          setReviewDetail(null);
+          setReviewError(null);
+          setReviewLoadingId(null);
+        }}
       />
 
       <TeacherAssignFromLibraryModal
