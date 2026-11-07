@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
-import { ClipboardList, Loader2, RefreshCw } from 'lucide-react';
+import { Calendar, ClipboardList, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { ConversationMessage } from '@/app/messages/actions';
 import {
@@ -96,22 +96,45 @@ function statusBadge(status: string): ReactNode {
   );
 }
 
-function examResultBadge(
+function splitStudentName(fullName: string): { first: string; second: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { first: parts[0] ?? '—', second: '' };
+  }
+  return { first: parts[0]!, second: parts.slice(1).join(' ') };
+}
+
+function assignmentKindLabel(
+  assignmentType: TeacherAssignmentProgressRow['assignmentType'],
+): string {
+  return assignmentType === 'exam' ? 'Deneme sınavı' : 'Çalışma ödevi';
+}
+
+function compactExamScore(
   result: TeacherAssignmentProgressRow['examResult'],
 ): ReactNode {
-  if (!result) {
-    return <span className="text-slate-600">—</span>;
-  }
-
+  if (!result) return null;
   const pct = Math.round(result.percentage);
-
   return (
-    <span className="inline-flex max-w-[220px] flex-wrap items-center gap-1 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-2.5 py-1 text-xs font-medium text-emerald-100">
-      <span aria-hidden>🎯</span>
+    <span className="inline-flex max-w-full items-center gap-1 truncate rounded-md border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-100">
       <span className="truncate">{result.scaledResult}</span>
-      <span className="text-emerald-200/80">(%{pct})</span>
+      <span className="shrink-0 text-emerald-200/80">(%{pct})</span>
     </span>
   );
+}
+
+function rowStatusBadge(
+  status: string,
+  overdue: boolean,
+): ReactNode {
+  if (overdue) {
+    return (
+      <span className="inline-flex rounded-md border border-rose-400/45 bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-100">
+        Gecikti
+      </span>
+    );
+  }
+  return statusBadge(status);
 }
 
 function formatDate(iso: string): string {
@@ -193,6 +216,14 @@ export function TeacherAssignmentsProgressSection({
       a[1].localeCompare(b[1], 'tr'),
     );
   }, [rows]);
+
+  const studentScopeById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const student of assignmentStudentPool) {
+      map.set(student.studentId, student.scopeLabel);
+    }
+    return map;
+  }, [assignmentStudentPool]);
 
   const filteredRows = useMemo(() => {
     const now = Date.now();
@@ -371,7 +402,7 @@ export function TeacherAssignmentsProgressSection({
         </div>
       ) : null}
 
-      <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900/40 p-6">
+      <div className="w-full rounded-xl border border-white/10 bg-slate-900/40 p-5">
         {rows.length === 0 ? (
           <div className="py-14 text-center">
             <ClipboardList className="mx-auto size-8 text-slate-700" />
@@ -388,151 +419,156 @@ export function TeacherAssignmentsProgressSection({
             Bu filtrelere uyan kayıt yok.
           </div>
         ) : (
-          <div className="w-full overflow-x-auto">
-            <table className="w-full min-w-[860px] border-collapse text-left text-sm">
-              <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
-                <tr>
-                  <th className="min-w-[140px] px-4 py-3.5 font-medium">
-                    Öğrenci
-                  </th>
-                  <th className="min-w-[200px] px-4 py-3.5 font-medium">
-                    Materyal
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
-                    Atama Tarihi
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
-                    Son Teslim
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
-                    Durum
-                  </th>
-                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
-                    Sınav Notu / Sonuç
-                  </th>
-                  <th className="min-w-[170px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right font-medium">
-                    İncele / işlem
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {filteredRows.map((row) => {
-                  const overdue =
-                    row.status !== 'completed' &&
-                    isOverdueRow(row, now);
-                  const showRemind =
-                    overdue && row.dueDate != null;
+          <table className="w-full border-collapse text-left text-sm">
+            <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
+              <tr>
+                <th className="w-44 px-2 py-3 font-medium">Öğrenci</th>
+                <th className="min-w-[200px] flex-1 px-2 py-3 font-medium">
+                  Materyal & sınav
+                </th>
+                <th className="w-44 whitespace-nowrap px-2 py-3 font-medium">
+                  Tarihler
+                </th>
+                <th className="w-56 px-2 py-3 pr-4 text-right font-medium">
+                  Durum & işlemler
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filteredRows.map((row) => {
+                const overdue =
+                  row.status !== 'completed' && isOverdueRow(row, now);
+                const showRemind = overdue && row.dueDate != null;
+                const { first, second } = splitStudentName(row.studentFullName);
+                const scopeLabel = studentScopeById.get(row.studentId);
 
-                  return (
-                    <tr
-                      key={row.assignmentId}
-                      className="transition hover:bg-white/[0.02]"
-                    >
-                      <td className="min-w-[140px] px-4 py-3.5 font-medium text-white">
-                        {row.studentFullName}
-                      </td>
-                      <td className="min-w-[200px] px-4 py-3.5">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-slate-200">{row.materialTitle}</p>
-                          {overdue ? (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-rose-400/45 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-100">
-                              <span aria-hidden>⏱️</span>
-                              Gecikti
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 text-xs text-slate-500">
+                return (
+                  <tr
+                    key={row.assignmentId}
+                    className="align-top transition hover:bg-white/[0.02]"
+                  >
+                    <td className="w-44 px-2 py-3.5">
+                      <div className="text-sm font-medium text-white">
+                        {first}
+                        {second ? (
+                          <>
+                            <br />
+                            {second}
+                          </>
+                        ) : null}
+                      </div>
+                      {scopeLabel ? (
+                        <span className="mt-1.5 inline-block max-w-full truncate rounded border border-sky-400/25 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-100">
+                          {scopeLabel}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="min-w-[200px] px-2 py-3.5">
+                      <p className="line-clamp-2 text-sm text-slate-200">
+                        {row.materialTitle}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-400">
+                        <span className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-slate-300">
                           {row.curriculum}
-                        </p>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
-                        {formatDate(row.assignedAt)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
-                        {row.dueDate ? formatDateTime(row.dueDate) : '—'}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {statusBadge(row.status)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3.5">
-                        {examResultBadge(row.examResult)}
-                      </td>
-                      <td className="min-w-[170px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {row.status === 'completed' ? (
-                            <button
-                              type="button"
-                              onClick={() => openAssignmentReview(row)}
-                              disabled={
-                                reviewPending &&
-                                reviewLoadingId === row.assignmentId
-                              }
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-50 transition hover:bg-indigo-500/30 disabled:opacity-50"
-                            >
-                              {reviewPending &&
-                              reviewLoadingId === row.assignmentId ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <span aria-hidden>📊</span>
-                              )}
-                              İncele / sonuç
-                            </button>
-                          ) : (
-                            <span className="inline-flex shrink-0 rounded-md border border-slate-600/40 bg-slate-800/50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
-                              Bekleniyor
-                            </span>
-                          )}
-                          {showRemind ? (
-                            <button
-                              type="button"
-                              onClick={() => handleRemind(row)}
-                              disabled={
-                                remindPending &&
-                                remindingId === row.assignmentId
-                              }
-                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/22 disabled:opacity-50"
-                            >
-                              {remindPending &&
-                              remindingId === row.assignmentId ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <span aria-hidden>🔔</span>
-                              )}
-                              Hatırlat
-                            </button>
-                          ) : null}
+                        </span>
+                        <span className="mx-1.5 text-slate-600">·</span>
+                        {assignmentKindLabel(row.assignmentType)}
+                      </p>
+                    </td>
+                    <td className="w-44 whitespace-nowrap px-2 py-3.5">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                        <Calendar
+                          className="size-3.5 shrink-0 text-slate-400"
+                          aria-hidden
+                        />
+                        <span>Atandı: {formatDate(row.assignedAt)}</span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+                        <Clock
+                          className="size-3.5 shrink-0 text-slate-500"
+                          aria-hidden
+                        />
+                        <span>
+                          Teslim:{' '}
+                          {row.dueDate ? formatDateTime(row.dueDate) : '—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="w-56 px-2 py-3.5 pr-4 text-right">
+                      <div className="flex flex-col items-end gap-1">
+                        {rowStatusBadge(row.status, overdue)}
+                        {row.status === 'completed'
+                          ? compactExamScore(row.examResult)
+                          : null}
+                      </div>
+                      <div className="mt-2 flex items-center justify-end gap-2">
+                        {row.status === 'completed' ? (
                           <button
                             type="button"
-                            onClick={() =>
-                              setMessageTarget({
-                                partnerId: row.studentId,
-                                partnerLabel: row.studentFullName,
-                                assignmentId: row.assignmentId,
-                                contextLabel: row.materialTitle,
-                              })
+                            onClick={() => openAssignmentReview(row)}
+                            disabled={
+                              reviewPending &&
+                              reviewLoadingId === row.assignmentId
                             }
-                            className="relative inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-400/35 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
-                            aria-label="Mesajlar"
-                            title="Mesajlar"
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-2 py-1 text-[11px] font-semibold text-indigo-50 transition hover:bg-indigo-500/30 disabled:opacity-50"
                           >
-                            <span aria-hidden className="text-sm leading-none">
-                              ✉️
-                            </span>
-                            <UnreadMessageBadge
-                              count={
-                                unreadByAssignment[row.assignmentId] ?? 0
-                              }
-                              className="absolute -top-1.5 -right-1.5"
-                            />
+                            {reviewPending &&
+                            reviewLoadingId === row.assignmentId ? (
+                              <Loader2 className="size-3.5 animate-spin" />
+                            ) : (
+                              <span aria-hidden>📊</span>
+                            )}
+                            İncele / sonuç
                           </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        ) : null}
+                        {showRemind ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemind(row)}
+                            disabled={
+                              remindPending &&
+                              remindingId === row.assignmentId
+                            }
+                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/12 px-2 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/22 disabled:opacity-50"
+                          >
+                            {remindPending &&
+                            remindingId === row.assignmentId ? (
+                              <Loader2 className="size-3 animate-spin" />
+                            ) : (
+                              <span aria-hidden>🔔</span>
+                            )}
+                            Hatırlat
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMessageTarget({
+                              partnerId: row.studentId,
+                              partnerLabel: row.studentFullName,
+                              assignmentId: row.assignmentId,
+                              contextLabel: row.materialTitle,
+                            })
+                          }
+                          className="relative inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-400/35 bg-violet-500/10 px-2 py-1.5 text-xs text-violet-200 transition hover:bg-violet-500/20"
+                          aria-label="Mesaj gönder"
+                          title="Mesaj gönder"
+                        >
+                          <span aria-hidden className="text-sm leading-none">
+                            ✉️
+                          </span>
+                          <UnreadMessageBadge
+                            count={unreadByAssignment[row.assignmentId] ?? 0}
+                            className="absolute -top-1.5 -right-1.5"
+                          />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
