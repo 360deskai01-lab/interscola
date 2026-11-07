@@ -78,6 +78,17 @@ async function getProfilesClient() {
 
 const TEACHER_ORG_POOL_ROLES = new Set(['teacher', 'coordinator']);
 
+function isMissingSchemaError(error: { code?: string; message?: string }): boolean {
+  const msg = error.message?.toLowerCase() ?? '';
+  return (
+    error.code === '42P01' ||
+    error.code === '42703' ||
+    error.code === 'PGRST204' ||
+    msg.includes('does not exist') ||
+    msg.includes('schema cache')
+  );
+}
+
 function isAssignmentSkippedError(error: string | undefined): boolean {
   if (!error) return false;
   const haystack = error.toLocaleLowerCase('tr-TR');
@@ -144,13 +155,19 @@ export async function getTeacherAssignmentStudentPoolAction(): Promise<
       .limit(1)
       .maybeSingle();
 
-    if (memberError?.code === '42P01') {
-      return {
-        success: true,
-        data: [...byId.values()].sort((a, b) =>
-          a.fullName.localeCompare(b.fullName, 'tr'),
-        ),
-      };
+    if (memberError) {
+      if (isMissingSchemaError(memberError)) {
+        return {
+          success: true,
+          data: [...byId.values()].sort((a, b) =>
+            a.fullName.localeCompare(b.fullName, 'tr'),
+          ),
+        };
+      }
+      console.error(
+        '[teacher-assignment] öğretmen kurum üyeliği:',
+        memberError.message,
+      );
     }
 
     if (!memberError && teacherMember) {
@@ -181,26 +198,51 @@ export async function getTeacherAssignmentStudentPoolAction(): Promise<
 
         const { data: orgMembers, error: orgError } = await orgQuery;
 
-        if (!orgError && orgMembers && orgMembers.length > 0) {
+        if (orgError) {
+          if (!isMissingSchemaError(orgError)) {
+            console.error(
+              '[teacher-assignment] kurum öğrenci listesi:',
+              orgError.message,
+            );
+          }
+        } else if (orgMembers && orgMembers.length > 0) {
           const userIds = orgMembers
             .map((m) => (m as { user_id: string }).user_id)
             .filter((id): id is string => typeof id === 'string');
 
-          const { data: profiles } = await client
-            .from('profiles')
-            .select('id, full_name, email')
-            .in('id', userIds);
+          let profiles: { id: string; full_name: string | null; email: string }[] =
+            [];
+          if (userIds.length > 0) {
+            try {
+              const { data: profileRows, error: profileError } = await client
+                .from('profiles')
+                .select('id, full_name, email')
+                .in('id', userIds);
+              if (profileError) {
+                if (!isMissingSchemaError(profileError)) {
+                  console.error(
+                    '[teacher-assignment] kurum öğrenci profilleri:',
+                    profileError.message,
+                  );
+                }
+              } else {
+                profiles = (profileRows ?? []) as typeof profiles;
+              }
+            } catch (profileLoadError) {
+              console.error(
+                '[teacher-assignment] kurum öğrenci profilleri beklenmeyen:',
+                profileLoadError instanceof Error
+                  ? profileLoadError.message
+                  : String(profileLoadError),
+              );
+            }
+          }
 
           const profileById = new Map<
             string,
             { full_name: string | null; email: string }
           >();
-          for (const profile of profiles ?? []) {
-            const p = profile as {
-              id: string;
-              full_name: string | null;
-              email: string;
-            };
+          for (const p of profiles) {
             profileById.set(p.id, p);
           }
 
@@ -422,16 +464,6 @@ export async function fetchTeacherAssignmentsProgressAction(): Promise<
 
 export type { TeacherAssignmentReviewDetail };
 
-function isMissingSchemaError(error: { code?: string; message?: string }): boolean {
-  const msg = error.message?.toLowerCase() ?? '';
-  return (
-    error.code === '42P01' ||
-    error.code === '42703' ||
-    msg.includes('does not exist') ||
-    msg.includes('schema cache')
-  );
-}
-
 function collectWeaknessTopics(evaluations: unknown): string[] {
   if (!isRecord(evaluations)) return [];
   const topics: string[] = [];
@@ -651,86 +683,43 @@ export async function getTeacherAssignmentReviewDetailAction(input: {
       };
     }
 
-    const selectRich =
-      'id, scaled_result, raw_score, max_score, percentage, created_at, evaluations, time_spent_seconds, duration_minutes, weakness_ledger';
     const selectLean =
       'id, scaled_result, raw_score, max_score, percentage, created_at, evaluations';
 
     let attempt: Record<string, unknown> | null = null;
 
-    let attemptRows: unknown[] | null = null;
-    let attemptError: { code?: string; message?: string } | null = null;
-
-    const primaryAttempt = await attemptsClient
-      .from(ATTEMPTS_TABLE)
-      .select(selectRich)
-      .eq('assignment_id', assignmentId)
-      .order('created_at', { ascending: false })
-      .limit(1);
-
-    attemptRows = primaryAttempt.data;
-    attemptError = primaryAttempt.error;
-
-    if (attemptError && isMissingSchemaError(attemptError)) {
-      return {
-        success: true,
-        data: {
-          assignmentId: row.id,
-          materialTitle: library?.title ?? 'Materyal',
-          studentFullName,
-          curriculum: library?.curriculum ?? '—',
-          assignmentType,
-          status: row.status,
-          isCompleted: true,
-          scaledResult: null,
-          rawScore: null,
-          maxScore: null,
-          percentage: null,
-          completedAt: null,
-          durationLabel: formatDurationLabel(null, row.exam_payload),
-          weaknessTopics: [],
-        },
-      };
-    }
-
-    if (attemptError?.code === '42703') {
-      const fallback = await attemptsClient
+    try {
+      const { data: attemptRows, error: attemptError } = await attemptsClient
         .from(ATTEMPTS_TABLE)
         .select(selectLean)
         .eq('assignment_id', assignmentId)
         .order('created_at', { ascending: false })
         .limit(1);
-      attemptError = fallback.error;
-      attemptRows = (fallback.data ?? []) as unknown[];
-    }
 
-    if (attemptError) {
+      if (attemptError) {
+        if (!isMissingSchemaError(attemptError)) {
+          console.error(
+            '[teacher-assignment] review attempt:',
+            attemptError.message,
+          );
+        }
+      } else if (
+        attemptRows &&
+        attemptRows.length > 0 &&
+        isRecord(attemptRows[0])
+      ) {
+        attempt = attemptRows[0] as Record<string, unknown>;
+      }
+    } catch (attemptLoadError) {
       console.error(
-        '[teacher-assignment] review attempt:',
-        attemptError.message,
+        '[teacher-assignment] review attempt beklenmeyen:',
+        attemptLoadError instanceof Error
+          ? attemptLoadError.message
+          : String(attemptLoadError),
       );
-    } else if (attemptRows && attemptRows.length > 0 && isRecord(attemptRows[0])) {
-      attempt = attemptRows[0] as Record<string, unknown>;
     }
 
-    const weaknessFromLedger = Array.isArray(attempt?.weakness_ledger)
-      ? (attempt!.weakness_ledger as unknown[])
-          .map((item) => {
-            if (typeof item === 'string') return item.trim();
-            if (isRecord(item) && typeof item.topic === 'string') {
-              return item.topic.trim();
-            }
-            return '';
-          })
-          .filter(Boolean)
-      : [];
-
-    const weaknessTopics = [
-      ...new Set([
-        ...collectWeaknessTopics(attempt?.evaluations),
-        ...weaknessFromLedger,
-      ]),
-    ];
+    const weaknessTopics = collectWeaknessTopics(attempt?.evaluations);
 
     const scaled =
       typeof attempt?.scaled_result === 'string'
@@ -789,4 +778,11 @@ export async function getTeacherAssignmentReviewDetailFormAction(input: {
   assignmentId: string;
 }): Promise<TeacherAssignmentActionResult<TeacherAssignmentReviewDetail>> {
   return getTeacherAssignmentReviewDetailAction(input);
+}
+
+/** İstemci tablosu — doğrudan Server Action referansı (inline sarmalayıcı yok). */
+export async function getTeacherAssignmentReviewDetailByIdFormAction(
+  assignmentId: string,
+): Promise<TeacherAssignmentActionResult<TeacherAssignmentReviewDetail>> {
+  return getTeacherAssignmentReviewDetailAction({ assignmentId });
 }

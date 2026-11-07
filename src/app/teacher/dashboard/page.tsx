@@ -38,7 +38,7 @@ import { UNREAD_GENERAL_AGGREGATE_KEY } from '@/lib/message-unread-scopes';
 import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
 import {
   createTeacherAssignmentFormAction,
-  getTeacherAssignmentReviewDetailFormAction,
+  getTeacherAssignmentReviewDetailByIdFormAction,
   getTeacherAssignmentStudentPoolAction,
 } from '@/lib/b2b/teacher-assignment-actions';
 
@@ -92,7 +92,16 @@ export default async function TeacherDashboardPage({
     getTeacherAssignmentsProgressAction(),
     getTeacherOrganizationContextAction(),
     getUnreadCountsByAssignmentAction(),
-    getTeacherAssignmentStudentPoolAction(),
+    getTeacherAssignmentStudentPoolAction().catch((loadError) => {
+      console.error(
+        '[teacher-dashboard] öğrenci havuzu:',
+        loadError instanceof Error ? loadError.message : String(loadError),
+      );
+      return {
+        success: false as const,
+        error: 'Öğrenci havuzu yüklenemedi.',
+      };
+    }),
   ]);
   const unreadCounts = unreadResult.counts ?? {};
   const data = result.success ? result.data : undefined;
@@ -197,9 +206,7 @@ export default async function TeacherDashboardPage({
           onGenerateExamFromLibrary={generateExamFromLibraryFormAction}
           onLoadLibraryAssignmentHistory={getLibraryAssignmentHistoryFormAction}
           onCreateTeacherAssignment={createTeacherAssignmentFormAction}
-          onGetAssignmentReview={(assignmentId) =>
-            getTeacherAssignmentReviewDetailFormAction({ assignmentId })
-          }
+          onGetAssignmentReview={getTeacherAssignmentReviewDetailByIdFormAction}
           onLoadConversation={getConversationFormAction}
           onSendMessage={sendMessageFormAction}
           onMarkMessagesRead={markMessagesAsReadFormAction}
