@@ -21,14 +21,22 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { rotateCoordinatorJoinCodeAction } from '@/lib/b2b/coordinator-actions';
+import {
+  getCoordinatorStudentDetailAction,
+  rotateCoordinatorJoinCodeAction,
+} from '@/lib/b2b/coordinator-actions';
 import {
   formatJoinCodeDisplay,
   normalizeJoinCodeInput,
 } from '@/lib/b2b/join-code';
-import type { CoordinatorOrganizationContext } from '@/lib/b2b/coordinator-types';
+import type {
+  CoordinatorMemberSummary,
+  CoordinatorOrganizationContext,
+  CoordinatorStudentDetail,
+} from '@/lib/b2b/coordinator-types';
 import type { CoordinatorDashboardTab } from '@/lib/coordinator-dashboard/dashboard-tabs';
 import { CoordinatorSidebar } from '@/components/coordinator/CoordinatorSidebar';
+import { CoordinatorStudentDrawer } from '@/components/coordinator/CoordinatorStudentDrawer';
 
 function licenseBadgeLabel(raw: string | null): string {
   const t = (raw ?? '').toLowerCase().trim();
@@ -48,6 +56,63 @@ function formatDate(iso: string | null): string {
     month: 'short',
     year: 'numeric',
   });
+}
+
+type BranchFilterValue = 'all' | string;
+
+function memberMatchesBranch(
+  member: CoordinatorMemberSummary,
+  branchFilter: BranchFilterValue,
+): boolean {
+  if (branchFilter === 'all') return true;
+  return member.branchId === branchFilter;
+}
+
+function BranchFilterBar({
+  branches,
+  value,
+  onChange,
+}: {
+  branches: CoordinatorOrganizationContext['branches'];
+  value: BranchFilterValue;
+  onChange: (next: BranchFilterValue) => void;
+}): ReactNode {
+  return (
+    <div
+      className="mb-4 flex flex-wrap gap-2"
+      role="group"
+      aria-label="Şube filtresi"
+    >
+      <button
+        type="button"
+        onClick={() => onChange('all')}
+        className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+          value === 'all'
+            ? 'border-indigo-400/45 bg-indigo-500/20 text-indigo-100'
+            : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-100'
+        }`}
+      >
+        Tüm şubeler
+      </button>
+      {branches.map((branch) => {
+        const active = value === branch.id;
+        return (
+          <button
+            key={branch.id}
+            type="button"
+            onClick={() => onChange(branch.id)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              active
+                ? 'border-indigo-400/45 bg-indigo-500/20 text-indigo-100'
+                : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-slate-100'
+            }`}
+          >
+            {branch.name}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function statusPill(ok: boolean): ReactNode {
@@ -86,8 +151,25 @@ export function CoordinatorDashboardClient({
   const [liveJoinCode, setLiveJoinCode] = useState<string | null>(
     () => context.organization.joinCode,
   );
+  const [branchFilter, setBranchFilter] = useState<BranchFilterValue>('all');
+  const [detailPending, startDetailTransition] = useTransition();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDetail, setDrawerDetail] =
+    useState<CoordinatorStudentDetail | null>(null);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [loadingStudentId, setLoadingStudentId] = useState<string | null>(null);
 
   const org = context.organization;
+
+  const filteredTeachers = useMemo(
+    () => context.teachers.filter((m) => memberMatchesBranch(m, branchFilter)),
+    [context.teachers, branchFilter],
+  );
+
+  const filteredStudents = useMemo(
+    () => context.students.filter((m) => memberMatchesBranch(m, branchFilter)),
+    [context.students, branchFilter],
+  );
   const branchCurrent = useMemo(() => {
     const list = context.branches;
     if (list.length === 0) return 'Merkez (şube tanımsız)';
@@ -120,6 +202,25 @@ export function CoordinatorDashboardClient({
       setCopied(false);
     }
   }, [liveJoinCode]);
+
+  function openStudentAcademicDrawer(studentUserId: string) {
+    setDrawerOpen(true);
+    setDrawerDetail(null);
+    setDrawerError(null);
+    setLoadingStudentId(studentUserId);
+    startDetailTransition(async () => {
+      const result = await getCoordinatorStudentDetailAction({
+        organizationId: org.id,
+        studentProfileId: studentUserId,
+      });
+      setLoadingStudentId(null);
+      if (!result.success) {
+        setDrawerError(result.error);
+        return;
+      }
+      setDrawerDetail(result.studentDetail);
+    });
+  }
 
   function handleRotateJoinCode() {
     setRotateError(null);
@@ -438,6 +539,11 @@ export function CoordinatorDashboardClient({
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Öğretmen kadrosu
               </h2>
+              <BranchFilterBar
+                branches={context.branches}
+                value={branchFilter}
+                onChange={setBranchFilter}
+              />
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
@@ -449,14 +555,16 @@ export function CoordinatorDashboardClient({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {context.teachers.length === 0 ? (
+                    {filteredTeachers.length === 0 ? (
                       <tr>
                         <td colSpan={4} className="py-8 text-center text-slate-500">
-                          Henüz kayıtlı öğretmen yok.
+                          {context.teachers.length === 0
+                            ? 'Henüz kayıtlı öğretmen yok.'
+                            : 'Bu şube için öğretmen bulunamadı.'}
                         </td>
                       </tr>
                     ) : (
-                      context.teachers.map((t) => (
+                      filteredTeachers.map((t) => (
                         <tr key={t.id} className="text-slate-200">
                           <td className="py-3 pr-4 font-medium">{t.displayName}</td>
                           <td className="py-3 pr-4 text-slate-400">
@@ -480,25 +588,33 @@ export function CoordinatorDashboardClient({
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Kayıtlı öğrenciler
               </h2>
+              <BranchFilterBar
+                branches={context.branches}
+                value={branchFilter}
+                onChange={setBranchFilter}
+              />
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px] text-left text-sm">
+                <table className="w-full min-w-[920px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
                       <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
                       <th className="pb-3 pr-4 font-medium">Son deneme</th>
                       <th className="pb-3 pr-4 font-medium">Hedef sınavlar</th>
-                      <th className="pb-3 font-medium">Kayıt tarihi</th>
+                      <th className="pb-3 pr-4 font-medium">Kayıt tarihi</th>
+                      <th className="pb-3 font-medium text-right">İşlem</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
-                    {context.students.length === 0 ? (
+                    {filteredStudents.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="py-8 text-center text-slate-500">
-                          Henüz öğrenci bağlanmamış.
+                        <td colSpan={5} className="py-8 text-center text-slate-500">
+                          {context.students.length === 0
+                            ? 'Henüz öğrenci bağlanmamış.'
+                            : 'Bu şube için öğrenci bulunamadı.'}
                         </td>
                       </tr>
                     ) : (
-                      context.students.map((s) => (
+                      filteredStudents.map((s) => (
                         <tr key={s.id} className="text-slate-200">
                           <td className="py-3 pr-4 font-medium">{s.displayName}</td>
                           <td className="py-3 pr-4">
@@ -528,8 +644,26 @@ export function CoordinatorDashboardClient({
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="py-3 text-slate-400">
+                          <td className="py-3 pr-4 text-slate-400">
                             {formatDate(s.memberCreatedAt)}
+                          </td>
+                          <td className="py-3 text-right">
+                            <button
+                              type="button"
+                              disabled={
+                                detailPending && loadingStudentId === s.userId
+                              }
+                              onClick={() => openStudentAcademicDrawer(s.userId)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/35 bg-indigo-500/15 px-2.5 py-1.5 text-[11px] font-medium text-indigo-100 transition hover:bg-indigo-500/25 disabled:opacity-50"
+                            >
+                              {detailPending &&
+                              loadingStudentId === s.userId ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <span aria-hidden>📊</span>
+                              )}
+                              Akademik karne / incele
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -589,6 +723,14 @@ export function CoordinatorDashboardClient({
           ) : null}
         </div>
       </div>
+
+      <CoordinatorStudentDrawer
+        open={drawerOpen}
+        loading={detailPending}
+        error={drawerError}
+        detail={drawerDetail}
+        onClose={() => setDrawerOpen(false)}
+      />
     </main>
   );
 }

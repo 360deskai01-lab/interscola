@@ -69,3 +69,29 @@ export interface CoordinatorOrganizationContext {
   students: CoordinatorMemberSummary[];
   orgPerformance: CoordinatorOrgPerformanceMetrics;
 }
+
+/** Koordinatör akademik çekmece — tamamlanmış deneme satırı. */
+export interface CoordinatorStudentAttemptDetail {
+  id: string;
+  examTitle: string;
+  curriculum: string;
+  createdAt: string;
+  scaledResult: string;
+  rawScore: number | null;
+  maxScore: number | null;
+  scoreLabel: string;
+}
+
+/** `getCoordinatorStudentDetailAction` çıktısı. */
+export interface CoordinatorStudentDetail {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  targetExamLabels: string[];
+  targetScores: Record<string, number | string>;
+  bestSatScore: number | null;
+  bestIeltsBand: number | null;
+  attempts: CoordinatorStudentAttemptDetail[];
+}
