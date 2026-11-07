@@ -35,8 +35,10 @@ import type {
   CoordinatorStudentDetail,
 } from '@/lib/b2b/coordinator-types';
 import type { CoordinatorDashboardTab } from '@/lib/coordinator-dashboard/dashboard-tabs';
+import { CoordinatorReportModal } from '@/components/coordinator/CoordinatorReportModal';
 import { CoordinatorSidebar } from '@/components/coordinator/CoordinatorSidebar';
 import { CoordinatorStudentDrawer } from '@/components/coordinator/CoordinatorStudentDrawer';
+import { exportStudentsToCSV } from '@/lib/b2b/coordinator-export';
 
 function licenseBadgeLabel(raw: string | null): string {
   const t = (raw ?? '').toLowerCase().trim();
@@ -72,14 +74,17 @@ function BranchFilterBar({
   branches,
   value,
   onChange,
+  className,
 }: {
   branches: CoordinatorOrganizationContext['branches'];
   value: BranchFilterValue;
   onChange: (next: BranchFilterValue) => void;
+  className?: string;
 }): ReactNode {
+  const marginClass = className?.includes('mb-0') ? '' : 'mb-4';
   return (
     <div
-      className="mb-4 flex flex-wrap gap-2"
+      className={`flex flex-wrap gap-2 ${marginClass} ${className ?? ''}`.trim()}
       role="group"
       aria-label="Şube filtresi"
     >
@@ -158,6 +163,7 @@ export function CoordinatorDashboardClient({
     useState<CoordinatorStudentDetail | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [loadingStudentId, setLoadingStudentId] = useState<string | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const org = context.organization;
 
@@ -306,6 +312,17 @@ export function CoordinatorDashboardClient({
                   </div>
                 </div>
               </section>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReportModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-400/35 bg-indigo-500/15 px-4 py-2.5 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/25"
+                >
+                  <span aria-hidden>📄</span>
+                  Kurumsal Başarı Raporu (A4)
+                </button>
+              </div>
 
               <section className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
@@ -594,11 +611,30 @@ export function CoordinatorDashboardClient({
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Kayıtlı öğrenciler
               </h2>
-              <BranchFilterBar
-                branches={context.branches}
-                value={branchFilter}
-                onChange={setBranchFilter}
-              />
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <BranchFilterBar
+                  branches={context.branches}
+                  value={branchFilter}
+                  onChange={setBranchFilter}
+                  className="mb-0"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportStudentsToCSV(filteredStudents, org.name)
+                  }
+                  disabled={filteredStudents.length === 0}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/15 px-4 py-2 text-sm font-medium text-emerald-100 transition hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span aria-hidden>📥</span>
+                  CSV indir
+                  {branchFilter !== 'all' ? (
+                    <span className="text-xs font-normal text-emerald-200/80">
+                      ({filteredStudents.length})
+                    </span>
+                  ) : null}
+                </button>
+              </div>
               <div className="w-full overflow-x-auto">
                 <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                   <thead>
@@ -746,6 +782,17 @@ export function CoordinatorDashboardClient({
         error={drawerError}
         detail={drawerDetail}
         onClose={() => setDrawerOpen(false)}
+      />
+
+      <CoordinatorReportModal
+        open={reportModalOpen}
+        onClose={() => setReportModalOpen(false)}
+        organization={org}
+        branches={context.branches}
+        branchSummaryLabel={branchCurrent}
+        licenseBadgeLabel={licenseBadge}
+        performance={perf}
+        coordinatorName={coordinatorName}
       />
     </main>
   );
