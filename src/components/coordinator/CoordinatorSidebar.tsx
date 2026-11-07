@@ -73,7 +73,7 @@ export function CoordinatorSidebar({
   );
 
   return (
-    <aside className="lg:sticky lg:top-24 lg:w-72 lg:shrink-0">
+    <aside className="w-full shrink-0 lg:sticky lg:top-24 lg:w-72">
       <div className="flex min-h-0 flex-col rounded-2xl border border-white/10 bg-slate-950/70 p-4 backdrop-blur-sm lg:min-h-[calc(100dvh-10rem)]">
         <nav
           className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0"

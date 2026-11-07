@@ -244,7 +244,7 @@ export function CoordinatorDashboardClient({
   }
 
   return (
-    <main className="relative mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+    <main className="relative w-full">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 -top-24 h-72 bg-[radial-gradient(ellipse_at_50%_0%,rgba(99,102,241,0.22),transparent_65%)]"
@@ -259,7 +259,7 @@ export function CoordinatorDashboardClient({
           organization={org}
         />
 
-        <div className="min-w-0 flex-1 space-y-6">
+        <div className="min-w-0 w-full flex-1 space-y-6">
           {activeTab === 'overview' ? (
             <>
               <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-xl shadow-indigo-950/40 backdrop-blur-sm sm:p-8">
@@ -535,7 +535,7 @@ export function CoordinatorDashboardClient({
           ) : null}
 
           {activeTab === 'teachers' ? (
-            <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-sm sm:p-5">
+            <section className="w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900/40 p-6">
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Öğretmen kadrosu
               </h2>
@@ -544,14 +544,16 @@ export function CoordinatorDashboardClient({
                 value={branchFilter}
                 onChange={setBranchFilter}
               />
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
-                      <th className="pb-3 pr-4 font-medium">E-posta</th>
-                      <th className="pb-3 pr-4 font-medium">Şube</th>
-                      <th className="pb-3 font-medium">Durum</th>
+                      <th className="px-4 py-3.5 font-medium">Ad Soyad</th>
+                      <th className="px-4 py-3.5 font-medium">E-posta</th>
+                      <th className="px-4 py-3.5 font-medium">Şube</th>
+                      <th className="min-w-[100px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right font-medium">
+                        Durum
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -566,14 +568,18 @@ export function CoordinatorDashboardClient({
                     ) : (
                       filteredTeachers.map((t) => (
                         <tr key={t.id} className="text-slate-200">
-                          <td className="py-3 pr-4 font-medium">{t.displayName}</td>
-                          <td className="py-3 pr-4 text-slate-400">
+                          <td className="px-4 py-3.5 font-medium text-white">
+                            {t.displayName}
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-400">
                             {t.email ?? '—'}
                           </td>
-                          <td className="py-3 pr-4 text-slate-300">
+                          <td className="px-4 py-3.5 text-slate-300">
                             {t.branchName ?? '—'}
                           </td>
-                          <td className="py-3">{statusPill(true)}</td>
+                          <td className="min-w-[100px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right">
+                            {statusPill(true)}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -584,7 +590,7 @@ export function CoordinatorDashboardClient({
           ) : null}
 
           {activeTab === 'students' ? (
-            <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-sm sm:p-5">
+            <section className="w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900/40 p-6">
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Kayıtlı öğrenciler
               </h2>
@@ -593,15 +599,19 @@ export function CoordinatorDashboardClient({
                 value={branchFilter}
                 onChange={setBranchFilter}
               />
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[920px] text-left text-sm">
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
-                      <th className="pb-3 pr-4 font-medium">Son deneme</th>
-                      <th className="pb-3 pr-4 font-medium">Hedef sınavlar</th>
-                      <th className="pb-3 pr-4 font-medium">Kayıt tarihi</th>
-                      <th className="pb-3 font-medium text-right">İşlem</th>
+                      <th className="px-4 py-3.5 font-medium">Ad Soyad</th>
+                      <th className="px-4 py-3.5 font-medium">Son deneme</th>
+                      <th className="px-4 py-3.5 font-medium">Hedef sınavlar</th>
+                      <th className="whitespace-nowrap px-4 py-3.5 font-medium">
+                        Kayıt tarihi
+                      </th>
+                      <th className="min-w-[150px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right font-medium">
+                        İşlem
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -616,8 +626,10 @@ export function CoordinatorDashboardClient({
                     ) : (
                       filteredStudents.map((s) => (
                         <tr key={s.id} className="text-slate-200">
-                          <td className="py-3 pr-4 font-medium">{s.displayName}</td>
-                          <td className="py-3 pr-4">
+                          <td className="px-4 py-3.5 font-medium text-white">
+                            {s.displayName}
+                          </td>
+                          <td className="px-4 py-3.5">
                             {s.lastAttemptDisplay ? (
                               <span className="inline-flex rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-100">
                                 {s.lastAttemptDisplay}
@@ -628,7 +640,7 @@ export function CoordinatorDashboardClient({
                               </span>
                             )}
                           </td>
-                          <td className="py-3 pr-4">
+                          <td className="px-4 py-3.5">
                             {s.targetExamLabels.length > 0 ? (
                               <span className="flex flex-wrap gap-1">
                                 {s.targetExamLabels.map((tag) => (
@@ -644,10 +656,10 @@ export function CoordinatorDashboardClient({
                               <span className="text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="py-3 pr-4 text-slate-400">
+                          <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
                             {formatDate(s.memberCreatedAt)}
                           </td>
-                          <td className="py-3 text-right">
+                          <td className="min-w-[150px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right">
                             <button
                               type="button"
                               disabled={
@@ -675,18 +687,20 @@ export function CoordinatorDashboardClient({
           ) : null}
 
           {activeTab === 'branches' ? (
-            <section className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 backdrop-blur-sm sm:p-5">
+            <section className="w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900/40 p-6">
               <h2 className="mb-4 text-base font-semibold text-slate-100">
                 Şubeler & kampüsler
               </h2>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+              <div className="w-full overflow-x-auto">
+                <table className="w-full min-w-[720px] border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 pr-4 font-medium">Kampüs</th>
-                      <th className="pb-3 pr-4 font-medium">Şehir</th>
-                      <th className="pb-3 pr-4 font-medium">Öğretmen</th>
-                      <th className="pb-3 font-medium">Öğrenci</th>
+                      <th className="px-4 py-3.5 font-medium">Kampüs</th>
+                      <th className="px-4 py-3.5 font-medium">Şehir</th>
+                      <th className="px-4 py-3.5 font-medium">Öğretmen</th>
+                      <th className="min-w-[100px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right font-medium">
+                        Öğrenci
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -700,17 +714,19 @@ export function CoordinatorDashboardClient({
                     ) : (
                       context.branches.map((b) => (
                         <tr key={b.id} className="text-slate-200">
-                          <td className="py-3 pr-4 font-medium">{b.name}</td>
-                          <td className="py-3 pr-4">
+                          <td className="px-4 py-3.5 font-medium text-white">
+                            {b.name}
+                          </td>
+                          <td className="px-4 py-3.5">
                             <span className="inline-flex items-center gap-1.5 text-slate-400">
                               <MapPin className="size-3.5 text-slate-500" />
                               {b.city?.trim() || '—'}
                             </span>
                           </td>
-                          <td className="py-3 pr-4 tabular-nums text-slate-300">
+                          <td className="px-4 py-3.5 tabular-nums text-slate-300">
                             {b.activeTeacherCount}
                           </td>
-                          <td className="py-3 tabular-nums text-slate-300">
+                          <td className="min-w-[100px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right tabular-nums text-slate-300">
                             {b.activeStudentCount}
                           </td>
                         </tr>

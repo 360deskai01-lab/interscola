@@ -73,15 +73,17 @@ export default async function CoordinatorPage(): Promise<ReactNode> {
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <NavbarServer />
-      <CoordinatorDashboardShell
-        coordinatorName={
-          current.profile.full_name?.trim() ||
-          current.user.email ||
-          'Koordinatör'
-        }
-        profileEmail={current.user.email ?? ''}
-        context={result.data}
-      />
+      <div className="relative mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <CoordinatorDashboardShell
+          coordinatorName={
+            current.profile.full_name?.trim() ||
+            current.user.email ||
+            'Koordinatör'
+          }
+          profileEmail={current.user.email ?? ''}
+          context={result.data}
+        />
+      </div>
     </div>
   );
 }

@@ -26,7 +26,7 @@ export function CoordinatorDashboardShell(
   return (
     <Suspense
       fallback={
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-12 text-center text-sm text-slate-400">
+        <div className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-12 text-center text-sm text-slate-400">
           Koordinatör paneli yükleniyor…
         </div>
       }
