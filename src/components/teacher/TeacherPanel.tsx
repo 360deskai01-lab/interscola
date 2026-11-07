@@ -60,6 +60,7 @@ import type { StudentCareerInsightForTeacher } from '@/lib/student-dashboard/tea
 import type { TeacherDashboardTab } from '@/lib/teacher-dashboard/dashboard-tabs';
 import { TeacherExamRadarChip } from '@/components/teacher/TeacherExamRadarChip';
 import type { OfficialExamScheduleSummary } from '@/types/exam-radar';
+import type { CreateTeacherAssignmentInput } from '@/lib/b2b/teacher-assignment-actions';
 
 interface TeacherPanelProps {
   activeTab: TeacherDashboardTab;
@@ -107,6 +108,9 @@ interface TeacherPanelProps {
     error?: string;
     data?: LibraryAssignmentHistoryRow[];
   }>;
+  onCreateTeacherAssignment: (
+    input: CreateTeacherAssignmentInput,
+  ) => Promise<{ success: boolean; error?: string; count?: number }>;
   onLoadConversation: (
     partnerId: string,
     assignmentId?: string,
@@ -237,6 +241,7 @@ export function TeacherPanel({
   onAssignGeneratedExam,
   onGenerateExamFromLibrary,
   onLoadLibraryAssignmentHistory,
+  onCreateTeacherAssignment,
   onLoadConversation,
   onSendMessage,
   onMarkMessagesRead,
@@ -389,6 +394,9 @@ export function TeacherPanel({
         {activeTab === 'assignments' ? (
           <TeacherAssignmentsProgressSection
             rows={assignmentProgress}
+            libraryItems={libraryItems}
+            students={students}
+            onCreateTeacherAssignment={onCreateTeacherAssignment}
             unreadByAssignment={unreadByAssignment}
             onLoadConversation={onLoadConversation}
             onSendMessage={onSendMessage}

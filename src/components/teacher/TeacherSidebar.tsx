@@ -18,7 +18,7 @@ const NAV_ITEMS: {
   { id: 'overview', label: 'Genel Bakış', emoji: '📊' },
   { id: 'students', label: 'Sınıfım & Öğrenciler', emoji: '👥' },
   { id: 'library', label: 'Materyal & Sınav Kütüphanesi', emoji: '📚' },
-  { id: 'assignments', label: 'Ödev & İlerleme Takibi', emoji: '📈' },
+  { id: 'assignments', label: 'Ödev & Deneme Takibi', emoji: '📈' },
   {
     id: 'messages',
     label: 'İletişim & Mesajlar',

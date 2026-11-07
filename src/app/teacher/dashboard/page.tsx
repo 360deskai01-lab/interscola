@@ -36,6 +36,7 @@ import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { TeacherDashboardShell } from '@/components/teacher/TeacherDashboardShell';
 import { UNREAD_GENERAL_AGGREGATE_KEY } from '@/lib/message-unread-scopes';
 import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
+import { createTeacherAssignmentFormAction } from '@/lib/b2b/teacher-assignment-actions';
 
 export const instant = false;
 
@@ -174,6 +175,7 @@ export default async function TeacherDashboardPage({
           onAssignGeneratedExam={assignGeneratedExamFormAction}
           onGenerateExamFromLibrary={generateExamFromLibraryFormAction}
           onLoadLibraryAssignmentHistory={getLibraryAssignmentHistoryFormAction}
+          onCreateTeacherAssignment={createTeacherAssignmentFormAction}
           onLoadConversation={getConversationFormAction}
           onSendMessage={sendMessageFormAction}
           onMarkMessagesRead={markMessagesAsReadFormAction}

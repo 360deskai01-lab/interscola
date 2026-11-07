@@ -10,8 +10,14 @@ import {
 } from 'lucide-react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { ConversationMessage } from '@/app/messages/actions';
-import type { TeacherAssignmentProgressRow } from '@/app/teacher/library-actions';
-import { sendAssignmentOverdueReminderFormAction } from '@/app/teacher/library-actions';
+import type { TeacherStudent } from '@/app/teacher/actions';
+import {
+  sendAssignmentOverdueReminderFormAction,
+  type LibraryItem,
+  type TeacherAssignmentProgressRow,
+} from '@/app/teacher/library-actions';
+import type { CreateTeacherAssignmentInput } from '@/lib/b2b/teacher-assignment-actions';
+import { TeacherAssignFromLibraryModal } from '@/components/teacher/TeacherAssignFromLibraryModal';
 import {
   MessageConversationModal,
   type MessageThreadTarget,
@@ -19,6 +25,11 @@ import {
 
 interface TeacherAssignmentsProgressSectionProps {
   rows: TeacherAssignmentProgressRow[];
+  libraryItems: LibraryItem[];
+  students: TeacherStudent[];
+  onCreateTeacherAssignment: (
+    input: CreateTeacherAssignmentInput,
+  ) => Promise<{ success: boolean; error?: string; count?: number }>;
   unreadByAssignment: Record<string, number>;
   onLoadConversation: (
     partnerId: string,
@@ -135,6 +146,9 @@ const FILTER_PILLS: { id: StatusBucketFilter; label: string }[] = [
 
 export function TeacherAssignmentsProgressSection({
   rows,
+  libraryItems,
+  students,
+  onCreateTeacherAssignment,
   unreadByAssignment,
   onLoadConversation,
   onSendMessage,
@@ -152,6 +166,7 @@ export function TeacherAssignmentsProgressSection({
     useState<StatusBucketFilter>('all');
   const [toast, setToast] = useState<string | null>(null);
   const [remindingId, setRemindingId] = useState<string | null>(null);
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
 
   const studentOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -211,25 +226,35 @@ export function TeacherAssignmentsProgressSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-medium text-slate-200">
-            Ödev & İlerleme Takibi
+            Ödev & Deneme Takibi
           </h2>
           <p className="mt-1 text-xs text-slate-500">
-            Öğrencilerinin atanan materyallerdeki anlık durumları.
+            Öğrencilerinin atanan materyal ve denemelerdeki anlık durumları.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={pending}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-white/25 hover:text-white disabled:opacity-50"
-        >
-          {pending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="size-3.5" />
-          )}
-          Listeyi Yenile
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setAssignModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-400/35 bg-indigo-500/15 px-3.5 py-2 text-xs font-medium text-indigo-100 transition hover:bg-indigo-500/25"
+          >
+            <span aria-hidden>➕</span>
+            Kütüphaneden yeni ödev ata
+          </button>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={pending}
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-xs font-medium text-slate-300 transition hover:border-white/25 hover:text-white disabled:opacity-50"
+          >
+            {pending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            Listeyi Yenile
+          </button>
+        </div>
       </div>
 
       {rows.length > 0 ? (
@@ -323,7 +348,8 @@ export function TeacherAssignmentsProgressSection({
               Henüz atanmış ödev kaydı yok.
             </p>
             <p className="mt-1 text-xs text-slate-600">
-              Kütüphane sekmesinden materyal atadığında burada görünür.
+              Üstteki «Kütüphaneden yeni ödev ata» ile veya kütüphane sekmesinden
+              atama yaptığında burada görünür.
             </p>
           </div>
         ) : filteredRows.length === 0 ? (
@@ -448,6 +474,20 @@ export function TeacherAssignmentsProgressSection({
         onLoadConversation={onLoadConversation}
         onSendMessage={onSendMessage}
         onMarkRead={onMarkMessagesRead}
+      />
+
+      <TeacherAssignFromLibraryModal
+        open={assignModalOpen}
+        onClose={() => setAssignModalOpen(false)}
+        libraryItems={libraryItems}
+        students={students}
+        onSubmit={onCreateTeacherAssignment}
+        onSuccess={() => {
+          setToast(
+            'Atama kaydedildi; liste yenilendiğinde güncel durumu görürsünüz.',
+          );
+          router.refresh();
+        }}
       />
     </div>
   );
