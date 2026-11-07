@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { ExamRunner } from '@/components/exam/ExamRunner';
+import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
 import { scoreGuestDiagnostic } from '@/lib/test-et/guest-diagnostic-scoring';
 import { writeGuestDiagnosticToStorage } from '@/lib/test-et/guest-diagnostic-storage';
 import { testEtHref, type TestEtSlug } from '@/lib/test-et/test-et-config';
@@ -22,8 +23,8 @@ export function GuestDiagnosticSolveClient({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [secondsLeft, setSecondsLeft] = useState(
-    Math.max(60, exam.durationMinutes * 60),
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    resolveExamSessionDurationSeconds(exam),
   );
 
   const totalQuestions = exam.questions.length;

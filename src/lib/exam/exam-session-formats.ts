@@ -15,7 +15,10 @@ export const MINI_MOCK_QUESTIONS: Record<CurriculumCode, number> = {
   CAIE: 2,
 };
 
+/** IELTS / CAIE diagnostic yazma görevleri için taban süre. */
 export const DIAGNOSTIC_DRILL_DURATION_MINUTES = 15;
+/** Digital SAT diagnostic (3–5 soru) taban süre. */
+export const DIAGNOSTIC_DRILL_SAT_DURATION_MINUTES = 8;
 export const MINI_MOCK_DURATION_MINUTES = 18;
 
 export function inferSessionFormat(
@@ -50,10 +53,58 @@ export function questionCountForSessionFormat(
 
 export function durationMinutesForSessionFormat(
   format: ExamSessionFormatId,
+  curriculum: CurriculumCode = 'SAT',
 ): number {
-  return format === 'mini_mock'
-    ? MINI_MOCK_DURATION_MINUTES
-    : DIAGNOSTIC_DRILL_DURATION_MINUTES;
+  if (format === 'mini_mock') {
+    return MINI_MOCK_DURATION_MINUTES;
+  }
+  if (curriculum === 'SAT') {
+    return DIAGNOSTIC_DRILL_SAT_DURATION_MINUTES;
+  }
+  return DIAGNOSTIC_DRILL_DURATION_MINUTES;
+}
+
+/**
+ * Oturum formatı + müfredat için minimum süre (dakika).
+ */
+export function minimumDurationMinutesForSession(
+  format: ExamSessionFormatId,
+  curriculum: CurriculumCode,
+): number {
+  return durationMinutesForSessionFormat(format, curriculum);
+}
+
+const MAX_MINUTES_BEFORE_SECONDS_HEURISTIC = 90;
+
+/**
+ * `durationMinutes` alanını saniyeye çevirir; taban süre kalkanı ve birim karışıklığı koruması.
+ */
+export function resolveExamSessionDurationSeconds(
+  exam: AssessmentPayload,
+): number {
+  const format = inferSessionFormat(exam);
+  const minMinutes = minimumDurationMinutesForSession(format, exam.curriculum);
+  const minSeconds = minMinutes * 60;
+
+  let minutes = exam.durationMinutes;
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return minSeconds;
+  }
+
+  minutes = Math.trunc(minutes);
+
+  // durationMinutes alanına saniye yazılmış (ör. 15 sn) veya tabanın altında kalmış değer.
+  if (minutes < minMinutes && minutes <= MAX_MINUTES_BEFORE_SECONDS_HEURISTIC) {
+    return minSeconds;
+  }
+
+  // Saniye değeri dakika alanına sığmış (ör. 900 = 15 dk).
+  if (minutes > 600) {
+    return Math.max(minSeconds, minutes);
+  }
+
+  const effectiveMinutes = Math.max(minutes, minMinutes);
+  return effectiveMinutes * 60;
 }
 
 export function sessionFormatTitlePrefix(
@@ -95,7 +146,7 @@ export function decorateExamForSessionFormat(
   return {
     ...trimmed,
     title: `${sessionFormatTitlePrefix(format)} — ${baseTitle}`,
-    durationMinutes: durationMinutesForSessionFormat(format),
+    durationMinutes: durationMinutesForSessionFormat(format, curriculum),
   };
 }
 

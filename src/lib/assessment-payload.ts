@@ -2,7 +2,12 @@ import type {
   AssessmentPayload,
   CurriculumCode,
   EngineType,
+  ExamQuestion,
 } from '@/types/exam';
+import {
+  inferSessionFormat,
+  minimumDurationMinutesForSession,
+} from '@/lib/exam/exam-session-formats';
 
 const CURRICULA = new Set<CurriculumCode>(['IELTS', 'CAIE', 'SAT']);
 const ENGINE_TYPES = new Set<EngineType>([
@@ -53,12 +58,36 @@ export function parseAssessmentPayload(raw: unknown): AssessmentPayload {
       ? raw.title.trim()
       : 'Değerlendirme';
 
-  const durationMinutes =
+  const rawDuration =
     typeof raw.durationMinutes === 'number' &&
     Number.isFinite(raw.durationMinutes) &&
     raw.durationMinutes > 0
       ? Math.trunc(raw.durationMinutes)
-      : 30;
+      : null;
+
+  const stubForFormat: AssessmentPayload = {
+    curriculum: curriculum as CurriculumCode,
+    engineType: engineType as EngineType,
+    subject,
+    title,
+    durationMinutes: rawDuration ?? 30,
+    totalMarks: 0,
+    questions: raw.questions as ExamQuestion[],
+  };
+  const format = inferSessionFormat(stubForFormat);
+  const floorMinutes = minimumDurationMinutesForSession(
+    format,
+    curriculum as CurriculumCode,
+  );
+
+  let durationMinutes = rawDuration ?? floorMinutes;
+  if (durationMinutes < floorMinutes && durationMinutes <= 90) {
+    durationMinutes = floorMinutes;
+  } else if (durationMinutes > 600) {
+    durationMinutes = Math.max(floorMinutes, Math.round(durationMinutes / 60));
+  } else {
+    durationMinutes = Math.max(durationMinutes, floorMinutes);
+  }
 
   const totalMarks =
     typeof raw.totalMarks === 'number' &&

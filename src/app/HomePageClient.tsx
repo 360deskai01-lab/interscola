@@ -27,6 +27,7 @@ import type {
 import { ExamCardList } from '@/components/exam/ExamCardList';
 import {
   decorateExamForSessionFormat,
+  resolveExamSessionDurationSeconds,
   defaultQuestionCountForHome,
   type ExamSessionFormatId,
 } from '@/lib/exam/exam-session-formats';
@@ -395,7 +396,7 @@ export default function HomePageClient({
         setCurrentIndex(0);
         setDirection(1);
 
-        const totalSeconds = Math.max(60, nextExam.durationMinutes * 60);
+        const totalSeconds = resolveExamSessionDurationSeconds(nextExam);
         deadlineRef.current = Date.now() + totalSeconds * 1000;
         setSecondsLeft(totalSeconds);
         setPhase('exam');
@@ -416,7 +417,7 @@ export default function HomePageClient({
   const finishExam = useCallback(async () => {
     if (!exam) return;
 
-    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    const totalSeconds = resolveExamSessionDurationSeconds(exam);
     setFinishedFast(secondsLeft > totalSeconds / 2);
 
     setError(null);

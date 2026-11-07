@@ -24,6 +24,7 @@ import {
   readExamSessionRecovery,
   writeExamSessionRecovery,
 } from '@/lib/exam/exam-session-recovery';
+import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
 import { ExamResults } from '@/components/exam/ExamResults';
 import { ExamRunner } from '@/components/exam/ExamRunner';
 import { ErrorCard, GlowOrb } from '@/components/exam/ui';
@@ -135,9 +136,13 @@ export function StudentAssignmentExamClient({
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    const totalSeconds = resolveExamSessionDurationSeconds(exam);
     const recovered = readExamSessionRecovery(assignmentId);
     const maxIndex = Math.max(0, exam.questions.length - 1);
+    const minRecoveryRemaining = Math.max(
+      120,
+      Math.floor(totalSeconds * 0.2),
+    );
 
     if (recovered) {
       setAnswers(recovered.answers);
@@ -146,13 +151,18 @@ export function StudentAssignmentExamClient({
         0,
         Math.round((recovered.deadlineAt - Date.now()) / 1000),
       );
-      deadlineRef.current = recovered.deadlineAt;
-      setSecondsLeft(remaining > 0 ? remaining : 0);
+      if (remaining >= minRecoveryRemaining) {
+        deadlineRef.current = recovered.deadlineAt;
+        setSecondsLeft(remaining);
+      } else {
+        deadlineRef.current = Date.now() + totalSeconds * 1000;
+        setSecondsLeft(totalSeconds);
+      }
     } else {
       deadlineRef.current = Date.now() + totalSeconds * 1000;
       setSecondsLeft(totalSeconds);
     }
-  }, [assignmentId, exam.durationMinutes, exam.questions.length]);
+  }, [assignmentId, exam]);
 
   useEffect(() => {
     if (phase !== 'exam' || deadlineRef.current === null) return;
@@ -192,13 +202,13 @@ export function StudentAssignmentExamClient({
     hasAutoSubmittedRef.current = false;
     isFinishingRef.current = false;
     setIsFinishing(false);
-    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    const totalSeconds = resolveExamSessionDurationSeconds(exam);
     deadlineRef.current = Date.now() + totalSeconds * 1000;
     setSecondsLeft(totalSeconds);
     setPhase('exam');
   }, [
     assignmentId,
-    exam.durationMinutes,
+    exam,
     isSelfPractice,
     libraryId,
     onStartSelfPacedExam,
@@ -212,7 +222,7 @@ export function StudentAssignmentExamClient({
     lockExamTimer();
     clearExamSessionRecovery(assignmentId);
 
-    const totalSeconds = Math.max(60, exam.durationMinutes * 60);
+    const totalSeconds = resolveExamSessionDurationSeconds(exam);
     setFinishedFast(secondsLeft > totalSeconds / 2);
 
     setError(null);
