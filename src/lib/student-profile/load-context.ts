@@ -27,7 +27,9 @@ export function parseTargetScores(raw: unknown): StudentTargetScores {
   if (!isRecord(raw)) return {};
   const out: StudentTargetScores = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (!ALLOWED_SCORE_KEYS.has(key)) continue;
+    const isTargetKey = ALLOWED_SCORE_KEYS.has(key);
+    const isBaselineKey = /^(SAT|IELTS|CAIE)_baseline$/i.test(key);
+    if (!isTargetKey && !isBaselineKey) continue;
     if (typeof value === 'number' && Number.isFinite(value)) {
       out[key] = value;
     } else if (typeof value === 'string' && value.trim()) {
