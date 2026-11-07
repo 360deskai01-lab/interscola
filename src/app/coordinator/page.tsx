@@ -8,7 +8,7 @@ import {
 } from '@/lib/b2b/coordinator-types';
 import { getCurrentProfile } from '@/lib/auth';
 import { getStudentProfileDbClient } from '@/lib/student-profile/load-context';
-import { CoordinatorDashboardClient } from '@/components/coordinator/CoordinatorDashboardClient';
+import { CoordinatorDashboardShell } from '@/components/coordinator/CoordinatorDashboardShell';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 
 export const instant = false;
@@ -73,12 +73,13 @@ export default async function CoordinatorPage(): Promise<ReactNode> {
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <NavbarServer />
-      <CoordinatorDashboardClient
+      <CoordinatorDashboardShell
         coordinatorName={
           current.profile.full_name?.trim() ||
           current.user.email ||
           'Koordinatör'
         }
+        profileEmail={current.user.email ?? ''}
         context={result.data}
       />
     </div>
