@@ -63,7 +63,9 @@ import {
 import { computeAssignmentSidebarDot } from '@/lib/student-dashboard/assignment-dots';
 import type { LibraryExamFormat } from '@/lib/exam/library-exam-format';
 import { ExamRadarWidget } from '@/components/student/ExamRadarWidget';
+import { ScoreRunwayWidget } from '@/components/student/ScoreRunwayWidget';
 import type { OfficialExamRadarData } from '@/types/exam-radar';
+import { buildStudentScoreRunway } from '@/lib/score-runway/build-student-runway';
 
 interface ConnectClaimResult {
   success: boolean;
@@ -307,6 +309,17 @@ export function StudentPanel({
     [localAssignments],
   );
 
+  const scoreRunway = useMemo(
+    () =>
+      buildStudentScoreRunway({
+        commandCenter,
+        analytics,
+        examRadar,
+        curriculums,
+      }),
+    [commandCenter, analytics, examRadar, curriculums],
+  );
+
   const filteredAssignments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return localAssignments;
@@ -544,7 +557,10 @@ export function StudentPanel({
 
           {activeTab === 'cockpit' ? (
             <>
-              <ExamRadarWidget initialData={examRadar} />
+              <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+                <ExamRadarWidget initialData={examRadar} />
+                <ScoreRunwayWidget runway={scoreRunway} />
+              </div>
               <StudentPerformanceOverviewSection analytics={analytics} />
               <StudentCareerAcademicCockpit
                 data={commandCenter}
