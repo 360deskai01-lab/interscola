@@ -19,6 +19,11 @@ import type {
   ExamQuestion,
 } from '@/types/exam';
 import { isRecord } from '@/lib/exam-shared';
+import {
+  clearExamSessionRecovery,
+  readExamSessionRecovery,
+  writeExamSessionRecovery,
+} from '@/lib/exam/exam-session-recovery';
 import { ExamResults } from '@/components/exam/ExamResults';
 import { ExamRunner } from '@/components/exam/ExamRunner';
 import { ErrorCard, GlowOrb } from '@/components/exam/ui';
@@ -94,10 +99,13 @@ export function StudentAssignmentExamClient({
   const [completionWarning, setCompletionWarning] = useState<string | null>(
     null,
   );
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const deadlineRef = useRef<number | null>(null);
+  const timerIntervalRef = useRef<number | null>(null);
   const hasAutoSubmittedRef = useRef(false);
   const initializedRef = useRef(false);
+  const isFinishingRef = useRef(false);
 
   const questions = exam.questions;
   const question: ExamQuestion | undefined = questions[currentIndex];
@@ -115,14 +123,45 @@ export function StudentAssignmentExamClient({
 
   const answeredEvery = unansweredCount === 0;
 
+  const lockExamTimer = useCallback(() => {
+    if (timerIntervalRef.current !== null) {
+      window.clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    deadlineRef.current = null;
+  }, []);
+
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     const totalSeconds = Math.max(60, exam.durationMinutes * 60);
-    deadlineRef.current = Date.now() + totalSeconds * 1000;
-    setSecondsLeft(totalSeconds);
-  }, [exam.durationMinutes]);
+    const recovered = readExamSessionRecovery(assignmentId);
+    const maxIndex = Math.max(0, exam.questions.length - 1);
+
+    if (recovered) {
+      setAnswers(recovered.answers);
+      setCurrentIndex(Math.min(recovered.currentIndex, maxIndex));
+      const remaining = Math.max(
+        0,
+        Math.round((recovered.deadlineAt - Date.now()) / 1000),
+      );
+      deadlineRef.current = recovered.deadlineAt;
+      setSecondsLeft(remaining > 0 ? remaining : 0);
+    } else {
+      deadlineRef.current = Date.now() + totalSeconds * 1000;
+      setSecondsLeft(totalSeconds);
+    }
+  }, [assignmentId, exam.durationMinutes, exam.questions.length]);
+
+  useEffect(() => {
+    if (phase !== 'exam' || deadlineRef.current === null) return;
+    writeExamSessionRecovery(assignmentId, {
+      answers,
+      currentIndex,
+      deadlineAt: deadlineRef.current,
+    });
+  }, [answers, assignmentId, currentIndex, phase]);
 
   const goTo = useCallback(
     (index: number) => {
@@ -145,16 +184,20 @@ export function StudentAssignmentExamClient({
       return;
     }
 
+    clearExamSessionRecovery(assignmentId);
     setAnswers({});
     setCurrentIndex(0);
     setEvaluation(null);
     setCompletionWarning(null);
     hasAutoSubmittedRef.current = false;
+    isFinishingRef.current = false;
+    setIsFinishing(false);
     const totalSeconds = Math.max(60, exam.durationMinutes * 60);
     deadlineRef.current = Date.now() + totalSeconds * 1000;
     setSecondsLeft(totalSeconds);
     setPhase('exam');
   }, [
+    assignmentId,
     exam.durationMinutes,
     isSelfPractice,
     libraryId,
@@ -163,6 +206,12 @@ export function StudentAssignmentExamClient({
   ]);
 
   const finishExam = useCallback(async () => {
+    if (isFinishingRef.current) return;
+    isFinishingRef.current = true;
+    setIsFinishing(true);
+    lockExamTimer();
+    clearExamSessionRecovery(assignmentId);
+
     const totalSeconds = Math.max(60, exam.durationMinutes * 60);
     setFinishedFast(secondsLeft > totalSeconds / 2);
 
@@ -192,9 +241,21 @@ export function StudentAssignmentExamClient({
           ? caught.message
           : 'Değerlendirme sırasında bir sorun oluştu.',
       );
+      const resumeSeconds = Math.max(15, secondsLeft);
+      deadlineRef.current = Date.now() + resumeSeconds * 1000;
+      setSecondsLeft(resumeSeconds);
+      isFinishingRef.current = false;
+      setIsFinishing(false);
       setPhase('exam');
     }
-  }, [answers, assignmentId, exam, onCompleteAssignment, secondsLeft]);
+  }, [
+    answers,
+    assignmentId,
+    exam,
+    lockExamTimer,
+    onCompleteAssignment,
+    secondsLeft,
+  ]);
 
   useEffect(() => {
     if (phase !== 'exam' || deadlineRef.current === null) return;
@@ -209,8 +270,13 @@ export function StudentAssignmentExamClient({
     };
 
     update();
-    const timer = window.setInterval(update, 1000);
-    return () => window.clearInterval(timer);
+    timerIntervalRef.current = window.setInterval(update, 1000);
+    return () => {
+      if (timerIntervalRef.current !== null) {
+        window.clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
   }, [phase]);
 
   useEffect(() => {
@@ -307,6 +373,7 @@ export function StudentAssignmentExamClient({
             }
             onNavigate={goTo}
             onFinish={() => void finishExam()}
+            finishDisabled={isFinishing}
           />
         ) : null}
 

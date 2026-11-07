@@ -13,7 +13,7 @@ export function getScoreTransparencyCopy(
     return {
       scoreHeading: 'Tahmini SAT Bilişsel Seviye Göstergesi (400–1600)',
       footnote:
-        'Bu skor College Board Bluebook çok aşamalı adaptif modül yapısını içermez; hızlı bir seviye projeksiyonudur.',
+        'Bu skor College Board Bluebook çok aşamalı adaptif modül yapısını içermez.',
     };
   }
   if (curriculum === 'IELTS' || engineType === 'LANGUAGE') {
@@ -25,7 +25,6 @@ export function getScoreTransparencyCopy(
   }
   return {
     scoreHeading: 'Tahmini A-Level Yetkinlik Seviyesi (Grade A*–U)',
-    footnote:
-      'Bu sonuç tek bir vaka ve rubrik analizi üzerinden hesaplanmıştır.',
+    footnote: 'Bu sonuç tek bir vaka analizi üzerinden hesaplanmıştır.',
   };
 }

@@ -20,7 +20,10 @@ import {
   metricLabel,
   metricSuffix,
 } from '@/lib/exam-shared';
-import { getScoreTransparencyCopy } from '@/lib/exam/score-transparency';
+import {
+  ExamResultScoreHeading,
+  ExamResultTransparencyFootnote,
+} from '@/components/exam/ExamResultCard';
 import { inferSessionFormat, sessionFormatUiLabel } from '@/lib/exam/exam-session-formats';
 import { GlassCard, fireConfetti, useCountUp } from './ui';
 
@@ -65,10 +68,6 @@ export function ExamResults({
   );
 
   const breakdownEntries = Object.entries(evaluation.metricBreakdown);
-  const transparency = getScoreTransparencyCopy(
-    exam.curriculum,
-    exam.engineType,
-  );
   const sessionFormat = inferSessionFormat(exam);
 
   /*
@@ -125,9 +124,10 @@ export function ExamResults({
             {sessionFormatUiLabel(sessionFormat)}
           </p>
 
-          <p className="mx-auto mt-4 max-w-xl text-xs font-medium text-slate-300">
-            {transparency.scoreHeading}
-          </p>
+          <ExamResultScoreHeading
+            curriculum={exam.curriculum}
+            engineType={exam.engineType}
+          />
 
           <div className="mt-2 flex items-baseline justify-center gap-2">
             <span className="bg-gradient-to-br from-white to-slate-400 bg-clip-text text-6xl font-semibold tracking-tight text-transparent tabular-nums">
@@ -157,9 +157,10 @@ export function ExamResults({
             {evaluation.feedback}
           </p>
 
-          <p className="mx-auto mt-4 max-w-xl text-left text-[11px] leading-relaxed text-amber-200/90">
-            *{transparency.footnote}
-          </p>
+          <ExamResultTransparencyFootnote
+            curriculum={exam.curriculum}
+            engineType={exam.engineType}
+          />
         </div>
       </GlassCard>
 
