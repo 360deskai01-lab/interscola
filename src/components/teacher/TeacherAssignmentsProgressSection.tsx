@@ -2,12 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
-import {
-  ClipboardList,
-  Loader2,
-  MessageCircle,
-  RefreshCw,
-} from 'lucide-react';
+import { ClipboardList, Loader2, RefreshCw } from 'lucide-react';
 import { UnreadMessageBadge } from '@/components/messages/UnreadMessageBadge';
 import type { ConversationMessage } from '@/app/messages/actions';
 import {
@@ -376,9 +371,9 @@ export function TeacherAssignmentsProgressSection({
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-3xl border border-white/10 bg-white/[0.03]">
+      <div className="w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900/40 p-6">
         {rows.length === 0 ? (
-          <div className="px-6 py-14 text-center">
+          <div className="py-14 text-center">
             <ClipboardList className="mx-auto size-8 text-slate-700" />
             <p className="mt-3 text-sm text-slate-400">
               Henüz atanmış ödev kaydı yok.
@@ -389,27 +384,34 @@ export function TeacherAssignmentsProgressSection({
             </p>
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="px-6 py-10 text-center text-sm text-slate-500">
+          <div className="py-10 text-center text-sm text-slate-500">
             Bu filtrelere uyan kayıt yok.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="w-full overflow-x-auto">
             <table className="w-full min-w-[860px] border-collapse text-left text-sm">
               <thead className="border-b border-white/10 text-xs tracking-wide text-slate-500 uppercase">
                 <tr>
-                  <th className="px-4 py-3 font-medium sm:px-6">Öğrenci</th>
-                  <th className="px-4 py-3 font-medium sm:px-6">Materyal</th>
-                  <th className="px-4 py-3 font-medium sm:px-6">Atama Tarihi</th>
-                  <th className="px-4 py-3 font-medium sm:px-6">Son Teslim</th>
-                  <th className="px-4 py-3 font-medium sm:px-6">Durum</th>
-                  <th className="px-4 py-3 font-medium sm:px-6">
+                  <th className="min-w-[140px] px-4 py-3.5 font-medium">
+                    Öğrenci
+                  </th>
+                  <th className="min-w-[200px] px-4 py-3.5 font-medium">
+                    Materyal
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
+                    Atama Tarihi
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
+                    Son Teslim
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
+                    Durum
+                  </th>
+                  <th className="whitespace-nowrap px-4 py-3.5 font-medium">
                     Sınav Notu / Sonuç
                   </th>
-                  <th className="min-w-[120px] whitespace-nowrap px-4 py-3 text-right font-medium sm:px-6">
-                    İncele
-                  </th>
-                  <th className="min-w-[110px] pr-4 pl-4 text-right font-medium sm:px-6">
-                    İletişim
+                  <th className="min-w-[170px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right font-medium">
+                    İncele / işlem
                   </th>
                 </tr>
               </thead>
@@ -426,10 +428,10 @@ export function TeacherAssignmentsProgressSection({
                       key={row.assignmentId}
                       className="transition hover:bg-white/[0.02]"
                     >
-                      <td className="px-4 py-4 font-medium text-slate-100 sm:px-6">
+                      <td className="min-w-[140px] px-4 py-3.5 font-medium text-white">
                         {row.studentFullName}
                       </td>
-                      <td className="px-4 py-4 sm:px-6">
+                      <td className="min-w-[200px] px-4 py-3.5">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-slate-200">{row.materialTitle}</p>
                           {overdue ? (
@@ -443,53 +445,55 @@ export function TeacherAssignmentsProgressSection({
                           {row.curriculum}
                         </p>
                       </td>
-                      <td className="px-4 py-4 text-slate-400 sm:px-6">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
                         {formatDate(row.assignedAt)}
                       </td>
-                      <td className="px-4 py-4 text-slate-400 sm:px-6">
+                      <td className="whitespace-nowrap px-4 py-3.5 text-slate-400">
                         {row.dueDate ? formatDateTime(row.dueDate) : '—'}
                       </td>
-                      <td className="px-4 py-4 sm:px-6">
+                      <td className="whitespace-nowrap px-4 py-3.5">
                         {statusBadge(row.status)}
                       </td>
-                      <td className="px-4 py-4 sm:px-6">
+                      <td className="whitespace-nowrap px-4 py-3.5">
                         {examResultBadge(row.examResult)}
                       </td>
-                      <td className="min-w-[120px] whitespace-nowrap px-4 py-4 text-right sm:px-6">
-                        {row.status === 'completed' ? (
-                          <button
-                            type="button"
-                            onClick={() => openAssignmentReview(row)}
-                            disabled={
-                              reviewPending &&
-                              reviewLoadingId === row.assignmentId
-                            }
-                            className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-50 transition hover:bg-indigo-500/30 disabled:opacity-50"
-                          >
-                            {reviewPending &&
-                            reviewLoadingId === row.assignmentId ? (
-                              <Loader2 className="size-3.5 animate-spin" />
-                            ) : (
-                              <span aria-hidden>📊</span>
-                            )}
-                            İncele / sonuç
-                          </button>
-                        ) : (
-                          <span className="inline-flex rounded-md border border-slate-600/40 bg-slate-800/50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
-                            Bekleniyor
-                          </span>
-                        )}
-                      </td>
-                      <td className="min-w-[110px] px-4 py-4 pr-4 text-right sm:px-6 sm:pr-4">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
+                      <td className="min-w-[170px] whitespace-nowrap py-3.5 pl-4 pr-6 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {row.status === 'completed' ? (
+                            <button
+                              type="button"
+                              onClick={() => openAssignmentReview(row)}
+                              disabled={
+                                reviewPending &&
+                                reviewLoadingId === row.assignmentId
+                              }
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-400/40 bg-indigo-500/20 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-50 transition hover:bg-indigo-500/30 disabled:opacity-50"
+                            >
+                              {reviewPending &&
+                              reviewLoadingId === row.assignmentId ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <span aria-hidden>📊</span>
+                              )}
+                              İncele / sonuç
+                            </button>
+                          ) : (
+                            <span className="inline-flex shrink-0 rounded-md border border-slate-600/40 bg-slate-800/50 px-2.5 py-1.5 text-[11px] font-medium text-slate-500">
+                              Bekleniyor
+                            </span>
+                          )}
                           {showRemind ? (
                             <button
                               type="button"
                               onClick={() => handleRemind(row)}
-                              disabled={remindPending && remindingId === row.assignmentId}
-                              className="inline-flex items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/22 disabled:opacity-50"
+                              disabled={
+                                remindPending &&
+                                remindingId === row.assignmentId
+                              }
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/40 bg-amber-500/12 px-2.5 py-1 text-[11px] font-medium text-amber-100 transition hover:bg-amber-500/22 disabled:opacity-50"
                             >
-                              {remindPending && remindingId === row.assignmentId ? (
+                              {remindPending &&
+                              remindingId === row.assignmentId ? (
                                 <Loader2 className="size-3 animate-spin" />
                               ) : (
                                 <span aria-hidden>🔔</span>
@@ -507,10 +511,13 @@ export function TeacherAssignmentsProgressSection({
                                 contextLabel: row.materialTitle,
                               })
                             }
-                            className="relative inline-flex items-center gap-1.5 rounded-lg border border-violet-400/35 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+                            className="relative inline-flex shrink-0 items-center justify-center rounded-lg border border-violet-400/35 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/20"
+                            aria-label="Mesajlar"
+                            title="Mesajlar"
                           >
-                            <MessageCircle className="size-3.5" />
-                            Mesajlar
+                            <span aria-hidden className="text-sm leading-none">
+                              ✉️
+                            </span>
                             <UnreadMessageBadge
                               count={
                                 unreadByAssignment[row.assignmentId] ?? 0
