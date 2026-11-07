@@ -14,6 +14,7 @@ import {
 } from '../actions';
 import { getStudentCommandCenterDataAction } from '../command-center-data';
 import {
+  getStudentAcademicProfileAction,
   joinOrganizationByCodeAction,
   updateStudentGoalsAction,
 } from '../profile-actions';
@@ -92,6 +93,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     transcriptResult,
     portfolioResult,
     examRadarData,
+    academicProfileResult,
   ] = await Promise.all([
     getStudentTeachersAction(),
     getStudentAssignmentsAction(),
@@ -103,6 +105,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     getStudentTranscriptAction(),
     getStudentActivitiesAction(),
     getOfficialExamRadarAction(),
+    getStudentAcademicProfileAction(),
   ]);
 
   const curriculumUpper = curriculums.map((c) => c.toUpperCase());
@@ -163,6 +166,10 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     transcriptResult.data ?? createEmptyAcademicTranscript();
   const activityPassport =
     portfolioResult.data ?? createEmptyActivityPassport();
+  const observerToken =
+    academicProfileResult.success && academicProfileResult.data
+      ? academicProfileResult.data.observerToken
+      : '';
 
   const CURRICULUM_LABELS: Record<string, string> = {
     SAT: 'Digital SAT',
@@ -285,6 +292,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             activityPassport={activityPassport}
             onSaveStudentActivities={saveStudentActivitiesAction}
             examRadar={examRadar}
+            observerToken={observerToken}
           />
         </Suspense>
 

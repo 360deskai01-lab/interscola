@@ -64,6 +64,7 @@ import { computeAssignmentSidebarDot } from '@/lib/student-dashboard/assignment-
 import type { LibraryExamFormat } from '@/lib/exam/library-exam-format';
 import { ExamRadarWidget } from '@/components/student/ExamRadarWidget';
 import { ScoreRunwayWidget } from '@/components/student/ScoreRunwayWidget';
+import { StudentObserverLinkPanel } from '@/components/student/StudentObserverLinkPanel';
 import type { OfficialExamRadarData } from '@/types/exam-radar';
 import { buildStudentScoreRunways } from '@/lib/score-runway/build-student-runway';
 
@@ -143,6 +144,7 @@ interface StudentPanelProps {
     data: ActivityPassportData,
   ) => Promise<{ success: boolean; error?: string; data?: ActivityPassportData }>;
   examRadar: OfficialExamRadarData;
+  observerToken?: string;
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -241,6 +243,7 @@ export function StudentPanel({
   activityPassport,
   onSaveStudentActivities,
   examRadar,
+  observerToken = '',
 }: StudentPanelProps): ReactNode {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -536,6 +539,7 @@ export function StudentPanel({
 
           {activeTab === 'cockpit' ? (
             <>
+              <StudentObserverLinkPanel observerToken={observerToken} />
               <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
                 <ExamRadarWidget initialData={examRadar} />
                 <ScoreRunwayWidget bundle={scoreRunwayBundle} />
