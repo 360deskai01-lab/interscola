@@ -18,6 +18,16 @@ export interface CoordinatorBranchSummary {
   id: string;
   name: string;
   city: string | null;
+  activeTeacherCount: number;
+  activeStudentCount: number;
+}
+
+/** Kurumsal başarı radarı — tamamlanmış deneme özetleri. */
+export interface CoordinatorOrgPerformanceMetrics {
+  avgSatScore: number | null;
+  maxSatScore: number | null;
+  avgIeltsBand: number | null;
+  totalCompletedAttempts: number;
 }
 
 export interface CoordinatorMemberSummary {
@@ -32,6 +42,8 @@ export interface CoordinatorMemberSummary {
   memberCreatedAt: string | null;
   /** Öğrenci profilindeki hedef sınav etiketleri (ör. SAT, IELTS). */
   targetExamLabels: string[];
+  /** Son tamamlanan deneme özeti (yoksa null). */
+  lastAttemptDisplay: string | null;
 }
 
 export interface CoordinatorOrganizationSummary {
@@ -55,4 +67,5 @@ export interface CoordinatorOrganizationContext {
   branches: CoordinatorBranchSummary[];
   teachers: CoordinatorMemberSummary[];
   students: CoordinatorMemberSummary[];
+  orgPerformance: CoordinatorOrgPerformanceMetrics;
 }

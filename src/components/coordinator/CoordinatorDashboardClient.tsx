@@ -1,10 +1,12 @@
 'use client';
 
 import {
+  BookOpen,
   Building2,
   Check,
   ClipboardCopy,
   GraduationCap,
+  Globe2,
   LayoutGrid,
   MapPin,
   Users,
@@ -85,6 +87,10 @@ export function CoordinatorDashboardClient({
         : null;
 
   const joinCode = org.joinCode?.trim() || '—';
+  const perf = context.orgPerformance;
+  const satAvg = perf.avgSatScore;
+  const satMax = perf.maxSatScore;
+  const ieltsAvg = perf.avgIeltsBand;
 
   const copyJoinCode = useCallback(async () => {
     if (!org.joinCode?.trim()) return;
@@ -241,6 +247,114 @@ export function CoordinatorDashboardClient({
         </div>
       </section>
 
+      {/* Kurumsal başarı radarı */}
+      <section className="relative mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span aria-hidden>🏛️ </span>
+            Kurum SAT ortalaması
+          </p>
+          {satAvg !== null ? (
+            <>
+              <p className="mt-2 text-2xl font-semibold tabular-nums text-white">
+                {satAvg}
+                <span className="text-sm font-normal text-slate-400"> /1600</span>
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                En yüksek:{' '}
+                <span className="font-medium text-sky-200">
+                  {satMax ?? '—'} /1600
+                </span>
+              </p>
+              <div className="mt-3 space-y-1.5">
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Ortalama</span>
+                  <span>{Math.round(((satAvg ?? 0) / 1600) * 100)}%</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-md bg-slate-800">
+                  <div
+                    className="h-full rounded-md bg-gradient-to-r from-sky-500 to-indigo-500"
+                    style={{
+                      width: `${Math.min(100, Math.round((satAvg / 1600) * 100))}%`,
+                    }}
+                  />
+                </div>
+                {satMax !== null ? (
+                  <>
+                    <div className="flex justify-between text-[10px] text-slate-500">
+                      <span>En yüksek</span>
+                      <span>{Math.round((satMax / 1600) * 100)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-md bg-slate-800">
+                      <div
+                        className="h-full rounded-md bg-gradient-to-r from-cyan-400 to-sky-300"
+                        style={{
+                          width: `${Math.min(100, Math.round((satMax / 1600) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">
+              Henüz kurumsal SAT denemesi yok.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span aria-hidden>🌍 </span>
+            Kurum IELTS ortalaması
+          </p>
+          {ieltsAvg !== null ? (
+            <>
+              <p className="mt-2 flex items-baseline gap-2">
+                <span className="inline-flex rounded-md border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1 text-2xl font-semibold tabular-nums text-emerald-100">
+                  {ieltsAvg.toFixed(1)}
+                </span>
+                <Globe2 className="size-5 text-emerald-300/80" aria-hidden />
+              </p>
+              <p className="mt-1 text-xs text-slate-400">Ölçek: /9.0 band</p>
+              <div className="mt-3">
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Ortalama band</span>
+                  <span>{Math.round((ieltsAvg / 9) * 100)}%</span>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-md bg-slate-800">
+                  <div
+                    className="h-full rounded-md bg-gradient-to-r from-emerald-500 to-teal-400"
+                    style={{
+                      width: `${Math.min(100, Math.round((ieltsAvg / 9) * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-slate-500">
+              Henüz kurumsal IELTS denemesi yok.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span aria-hidden>📚 </span>
+            Toplam çözülen deneme hacmi
+          </p>
+          <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold tabular-nums text-white">
+            <BookOpen className="size-6 text-violet-300" aria-hidden />
+            {perf.totalCompletedAttempts}
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">
+            Kuruma bağlı aktif öğrencilerin tamamlanmış resmi deneme kayıtları.
+          </p>
+        </div>
+      </section>
+
       {/* Tabs */}
       <section className="relative mt-8 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-sm">
         <div className="flex flex-wrap gap-2 border-b border-white/10 p-4 sm:p-5">
@@ -307,10 +421,11 @@ export function CoordinatorDashboardClient({
           ) : null}
 
           {tab === 'students' ? (
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[820px] text-left text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
                   <th className="pb-3 pr-4 font-medium">Ad Soyad</th>
+                  <th className="pb-3 pr-4 font-medium">Son deneme</th>
                   <th className="pb-3 pr-4 font-medium">Hedef sınavlar</th>
                   <th className="pb-3 font-medium">Kayıt tarihi</th>
                 </tr>
@@ -318,7 +433,7 @@ export function CoordinatorDashboardClient({
               <tbody className="divide-y divide-white/5">
                 {context.students.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-500">
+                    <td colSpan={4} className="py-8 text-center text-slate-500">
                       Henüz öğrenci bağlanmamış.
                     </td>
                   </tr>
@@ -326,6 +441,17 @@ export function CoordinatorDashboardClient({
                   context.students.map((s) => (
                     <tr key={s.id} className="text-slate-200">
                       <td className="py-3 pr-4 font-medium">{s.displayName}</td>
+                      <td className="py-3 pr-4">
+                        {s.lastAttemptDisplay ? (
+                          <span className="inline-flex rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-100">
+                            {s.lastAttemptDisplay}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-500">
+                            Henüz deneme çözülmedi
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 pr-4">
                         {s.targetExamLabels.length > 0 ? (
                           <span className="flex flex-wrap gap-1">
@@ -353,17 +479,19 @@ export function CoordinatorDashboardClient({
           ) : null}
 
           {tab === 'branches' ? (
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
                   <th className="pb-3 pr-4 font-medium">Kampüs</th>
-                  <th className="pb-3 font-medium">Şehir</th>
+                  <th className="pb-3 pr-4 font-medium">Şehir</th>
+                  <th className="pb-3 pr-4 font-medium">Öğretmen</th>
+                  <th className="pb-3 font-medium">Öğrenci</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {context.branches.length === 0 ? (
                   <tr>
-                    <td colSpan={2} className="py-8 text-center text-slate-500">
+                    <td colSpan={4} className="py-8 text-center text-slate-500">
                       Tanımlı şube yok; tüm öğretmen/öğrenciler merkeze bağlı
                       olabilir.
                     </td>
@@ -372,11 +500,17 @@ export function CoordinatorDashboardClient({
                   context.branches.map((b) => (
                     <tr key={b.id} className="text-slate-200">
                       <td className="py-3 pr-4 font-medium">{b.name}</td>
-                      <td className="py-3">
+                      <td className="py-3 pr-4">
                         <span className="inline-flex items-center gap-1.5 text-slate-400">
                           <MapPin className="size-3.5 text-slate-500" />
                           {b.city?.trim() || '—'}
                         </span>
+                      </td>
+                      <td className="py-3 pr-4 tabular-nums text-slate-300">
+                        {b.activeTeacherCount}
+                      </td>
+                      <td className="py-3 tabular-nums text-slate-300">
+                        {b.activeStudentCount}
                       </td>
                     </tr>
                   ))

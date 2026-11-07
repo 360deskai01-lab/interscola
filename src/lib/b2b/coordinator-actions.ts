@@ -6,6 +6,7 @@ import {
   type CoordinatorOrganizationContext,
   isCoordinatorEligibleOrgRole,
 } from '@/lib/b2b/coordinator-types';
+import { loadCoordinatorOrgAnalytics } from '@/lib/b2b/coordinator-analytics';
 import {
   getStudentProfileDbClient,
   parseTargetScores,
@@ -192,15 +193,34 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
           orgRole,
           profile?.target_scores,
         ),
+        lastAttemptDisplay: null,
       };
     }
 
     const teachers = memberRows
       .filter((m) => m.org_role === 'teacher')
       .map(mapMember);
+    const studentUserIds = memberRows
+      .filter((m) => m.org_role === 'student')
+      .map((m) => m.user_id);
+
+    const analyticsBundle = await loadCoordinatorOrgAnalytics(
+      client,
+      studentUserIds,
+    );
+
+    function mapStudent(row: (typeof memberRows)[number]) {
+      const base = mapMember(row);
+      return {
+        ...base,
+        lastAttemptDisplay:
+          analyticsBundle.lastAttemptByStudentId.get(row.user_id) ?? null,
+      };
+    }
+
     const students = memberRows
       .filter((m) => m.org_role === 'student')
-      .map(mapMember);
+      .map(mapStudent);
 
     const context: CoordinatorOrganizationContext = {
       membershipId: coordinatorRow.id,
@@ -222,9 +242,16 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
         id: b.id,
         name: b.name,
         city: b.city,
+        activeTeacherCount: memberRows.filter(
+          (m) => m.org_role === 'teacher' && m.branch_id === b.id,
+        ).length,
+        activeStudentCount: memberRows.filter(
+          (m) => m.org_role === 'student' && m.branch_id === b.id,
+        ).length,
       })),
       teachers,
       students,
+      orgPerformance: analyticsBundle.orgPerformance,
     };
 
     return { success: true, data: context };
