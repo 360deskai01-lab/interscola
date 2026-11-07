@@ -5,7 +5,9 @@ import {
   parseIeltsBandFromAttempt,
   parseSatScoreFromAttempt,
 } from '@/lib/student-command-center/attempt-scores';
+import { resolveTrackExamDateYmd } from '@/lib/exam-radar/load-exam-radar';
 import type { OfficialExamRadarData } from '@/types/exam-radar';
+import type { StudentRecentScores } from '@/lib/student-command-center/attempt-scores';
 import {
   calculateScoreRunway,
   type ScoreRunwayCalculation,
@@ -147,9 +149,24 @@ function resolveBaselineForTrack(input: {
   };
 }
 
+function resolveTargetForTrack(
+  track: ScoreRunwayTrack,
+  goals: StudentCommandCenterData['goals'],
+  current: number,
+): number {
+  const fromProfile = parseTargetNumber(goals.targetScores[track]);
+  if (fromProfile !== null) return fromProfile;
+
+  if (track === 'SAT') {
+    return Math.min(1600, Math.max(1200, Math.round(current) + 150));
+  }
+  return Math.min(9, Math.max(5.5, Math.round((current + 1) * 10) / 10));
+}
+
 function normalizeActiveTracks(
   curriculums: string[],
   goals: StudentCommandCenterData['goals'],
+  recentScores: StudentRecentScores,
 ): ScoreRunwayTrack[] {
   const wanted = new Set<ScoreRunwayTrack>();
 
@@ -162,6 +179,9 @@ function normalizeActiveTracks(
     const upper = key.toUpperCase();
     if (upper === 'SAT' || upper === 'IELTS') wanted.add(upper);
   }
+
+  if (recentScores.satScore !== null) wanted.add('SAT');
+  if (recentScores.ieltsBand !== null) wanted.add('IELTS');
 
   return TRACK_ORDER.filter((t) => wanted.has(t));
 }
@@ -177,12 +197,11 @@ function buildRunwayForTrack(
   const goals = input.commandCenter.goals;
   const { recentScores } = input.commandCenter;
 
-  const target = parseTargetNumber(goals.targetScores[track]);
-  if (target === null) return null;
-
   const current =
     track === 'SAT' ? recentScores.satScore : recentScores.ieltsBand;
   if (current === null) return null;
+
+  const target = resolveTargetForTrack(track, goals, current);
 
   const manualBaseline = parseManualBaselineFromProfile(goals.targetScores, track);
   const { value: baseline, source } = resolveBaselineForTrack({
@@ -227,23 +246,21 @@ export function buildStudentScoreRunways(input: {
   examRadar: OfficialExamRadarData;
   curriculums: string[];
 }): StudentScoreRunwayBundle {
-  const empty: StudentScoreRunwayBundle = {
-    runwayList: [],
-    runways: { SAT: null, IELTS: null },
-    defaultTrack: null,
-  };
-
-  const examDate = input.examRadar.nearestExam?.examDate?.slice(0, 10);
-  if (!examDate) return empty;
-
-  const tracks = normalizeActiveTracks(input.curriculums, input.commandCenter.goals);
   const runwayList: StudentScoreRunwayViewModel[] = [];
   const runways: Record<ScoreRunwayTrack, StudentScoreRunwayViewModel | null> = {
     SAT: null,
     IELTS: null,
   };
 
+  const tracks = normalizeActiveTracks(
+    input.curriculums,
+    input.commandCenter.goals,
+    input.commandCenter.recentScores,
+  );
+  const nearestExam = input.examRadar.nearestExam;
+
   for (const track of tracks) {
+    const examDate = resolveTrackExamDateYmd(track, nearestExam);
     const runway = buildRunwayForTrack(
       {
         commandCenter: input.commandCenter,

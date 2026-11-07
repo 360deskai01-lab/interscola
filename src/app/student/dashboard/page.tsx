@@ -33,6 +33,7 @@ import {
   startSmartDiagnosticSelfPacedExamFormAction,
 } from '@/app/student/public-library-actions';
 import { getOfficialExamRadarAction } from '@/app/student/exam-radar-actions';
+import { enrichOfficialExamRadar } from '@/lib/exam-radar/load-exam-radar';
 import type { OfficialExamRadarData } from '@/types/exam-radar';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { ClaimGuestCareerAssessmentBridge } from '@/components/student/ClaimGuestCareerAssessmentBridge';
@@ -104,7 +105,16 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     getOfficialExamRadarAction(),
   ]);
 
-  const examRadar: OfficialExamRadarData = examRadarData;
+  const curriculumUpper = curriculums.map((c) => c.toUpperCase());
+  const examRadar: OfficialExamRadarData = enrichOfficialExamRadar(
+    examRadarData,
+    {
+      preferTrack:
+        curriculumUpper.includes('SAT') || !curriculumUpper.includes('IELTS')
+          ? 'SAT'
+          : 'IELTS',
+    },
+  );
 
   const teachers = teachersResult.teachers ?? [];
   const assignments = assignmentsResult.assignments ?? [];

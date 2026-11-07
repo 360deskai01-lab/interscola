@@ -437,38 +437,17 @@ export function StudentPanel({
       {!localGoalsContext.hasGoals ? (
         <div
           id="student-goals-entry"
-          className="flex flex-col gap-3 rounded-2xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-violet-500/10 p-4 sm:flex-row sm:items-center sm:justify-between"
+          className="rounded-2xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-violet-500/10 p-4"
         >
-          <div>
-            <p className="text-sm font-semibold text-amber-50">
-              Hedef skorunu ve üniversitelerini belirle!
-            </p>
-            <p className="mt-1 text-xs text-slate-400">
-              Kabul barajı eşleştirmesi ve gelişim raporları için hedeflerini
-              tanımla.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setGoalsModalOpen(true)}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-indigo-400/40 bg-indigo-500/20 px-4 py-2 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/30"
-          >
-            <span aria-hidden>🎯</span>
-            Hedeflerimi & Kurumumu Güncelle
-          </button>
+          <p className="text-sm font-semibold text-amber-50">
+            Hedef skorunu ve üniversitelerini belirle!
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Kabul barajı eşleştirmesi ve gelişim raporları için üst başlıktaki
+            «Hedeflerimi & Kurumumu Güncelle» düğmesini kullan.
+          </p>
         </div>
-      ) : (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setGoalsModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300 transition hover:border-indigo-400/35 hover:text-white"
-          >
-            <span aria-hidden>🎯</span>
-            Hedeflerimi & Kurumumu Güncelle
-          </button>
-        </div>
-      )}
+      ) : null}
 
       <StudentGoalsModal
         open={goalsModalOpen}

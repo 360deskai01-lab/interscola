@@ -6,6 +6,7 @@ import {
   fetchExamTestCentersForSchedule,
   fetchNearestOfficialExamSchedule,
 } from '@/lib/exam-radar/repository';
+import { enrichOfficialExamRadar } from '@/lib/exam-radar/load-exam-radar';
 import type { OfficialExamRadarData } from '@/types/exam-radar';
 
 function normalizeCityHint(raw: string | null | undefined): string | null {
@@ -61,14 +62,18 @@ export async function getOfficialExamRadarAction(
   const nearest = await fetchNearestOfficialExamSchedule();
 
   if (!nearest?.id) {
-    return { nearestExam: null, centers: [], userCity: resolvedCity };
+    return enrichOfficialExamRadar({
+      nearestExam: null,
+      centers: [],
+      userCity: resolvedCity,
+    });
   }
 
   const centers = await fetchExamTestCentersForSchedule(nearest.id, resolvedCity);
 
-  return {
+  return enrichOfficialExamRadar({
     nearestExam: nearest,
     centers,
     userCity: resolvedCity,
-  };
+  });
 }

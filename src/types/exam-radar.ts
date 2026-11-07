@@ -9,6 +9,8 @@ export interface OfficialExamScheduleSummary {
   registrationCloseDate: string | null;
   /** Yerel takvim günü farkı (bugünden sınav gününe, 0 = bugün). */
   daysRemaining: number;
+  /** DB kaydı yokken `load-exam-radar` deterministik projeksiyonu. */
+  isProjected?: boolean;
 }
 
 /** `public.exam_test_centers` — yetkili merkez satırı. */

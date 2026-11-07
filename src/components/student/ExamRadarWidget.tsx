@@ -71,6 +71,11 @@ export function ExamRadarWidget({ initialData }: ExamRadarWidgetProps): ReactNod
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-200/80">
             Yaklaşan resmi sınav
+            {exam.isProjected ? (
+              <span className="ml-1.5 normal-case text-amber-200/90">
+                · takvim projeksiyonu
+              </span>
+            ) : null}
           </p>
           <p className="truncate text-sm font-semibold text-slate-100">
             {exam.examName}
