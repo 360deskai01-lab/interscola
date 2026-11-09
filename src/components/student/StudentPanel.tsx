@@ -37,6 +37,7 @@ import type {
   StudentAnalyticsData,
   StudentAssignment,
 } from '@/app/student/actions';
+import type { StudentObserverTokenRow } from '@/app/student/observer-actions';
 import { StudentPerformanceOverviewSection } from '@/components/student/StudentPerformanceOverviewSection';
 import { StudentExploreSection } from '@/components/student/StudentExploreSection';
 import type { PublicLibraryItem } from '@/app/student/public-library-actions';
@@ -144,7 +145,7 @@ interface StudentPanelProps {
     data: ActivityPassportData,
   ) => Promise<{ success: boolean; error?: string; data?: ActivityPassportData }>;
   examRadar: OfficialExamRadarData;
-  observerToken?: string;
+  observerTokens?: StudentObserverTokenRow[];
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -243,7 +244,7 @@ export function StudentPanel({
   activityPassport,
   onSaveStudentActivities,
   examRadar,
-  observerToken = '',
+  observerTokens = [],
 }: StudentPanelProps): ReactNode {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -539,7 +540,7 @@ export function StudentPanel({
 
           {activeTab === 'cockpit' ? (
             <>
-              <StudentObserverLinkPanel observerToken={observerToken} />
+              <StudentObserverLinkPanel initialTokens={observerTokens} />
               <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
                 <ExamRadarWidget initialData={examRadar} />
                 <ScoreRunwayWidget bundle={scoreRunwayBundle} />

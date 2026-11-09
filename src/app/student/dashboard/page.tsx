@@ -18,6 +18,8 @@ import {
   joinOrganizationByCodeAction,
   updateStudentGoalsAction,
 } from '../profile-actions';
+import { listStudentObserverTokensAction } from '../observer-actions';
+import type { StudentObserverTokenRow } from '../observer-actions';
 import type { StudentGoalsContext } from '@/lib/student-profile/types';
 import type { StudentCommandCenterData } from '@/lib/student-command-center/types';
 import {
@@ -94,6 +96,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     portfolioResult,
     examRadarData,
     academicProfileResult,
+    observerTokensResult,
   ] = await Promise.all([
     getStudentTeachersAction(),
     getStudentAssignmentsAction(),
@@ -106,6 +109,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     getStudentActivitiesAction(),
     getOfficialExamRadarAction(),
     getStudentAcademicProfileAction(),
+    listStudentObserverTokensAction(),
   ]);
 
   const curriculumUpper = curriculums.map((c) => c.toUpperCase());
@@ -166,10 +170,10 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
     transcriptResult.data ?? createEmptyAcademicTranscript();
   const activityPassport =
     portfolioResult.data ?? createEmptyActivityPassport();
-  const observerToken =
-    academicProfileResult.success && academicProfileResult.data
-      ? academicProfileResult.data.observerToken
-      : '';
+  const observerTokens: StudentObserverTokenRow[] =
+    observerTokensResult.success && observerTokensResult.tokens
+      ? observerTokensResult.tokens
+      : [];
 
   const CURRICULUM_LABELS: Record<string, string> = {
     SAT: 'Digital SAT',
@@ -292,7 +296,7 @@ export default async function StudentDashboardPage(): Promise<ReactNode> {
             activityPassport={activityPassport}
             onSaveStudentActivities={saveStudentActivitiesAction}
             examRadar={examRadar}
-            observerToken={observerToken}
+            observerTokens={observerTokens}
           />
         </Suspense>
 
