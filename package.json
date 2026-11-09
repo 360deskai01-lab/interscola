@@ -12,7 +12,8 @@
     "audit:hard:360": "tsx scripts/audit-hard-360.ts",
     "audit:hard:v3": "tsx scripts/audit-hard-v3.ts",
     "audit:hard:v4": "tsx scripts/audit-hard-v4.ts",
-    "audit:hard:v5": "tsx scripts/audit-hard-v5.ts"
+    "audit:hard:v5": "tsx scripts/audit-hard-v5.ts",
+    "audit:hard:v6": "tsx scripts/audit-hard-v6.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/auth';
 import { computeSeatUsage } from '@/lib/b2b/license-quota';
+import { resolveCoordinatorOrganizationAccess } from '@/lib/b2b/coordinator-org-access';
 import { computeTeacherLicenseSnapshot } from '@/lib/b2b/teacher-quota';
 import {
   type CoordinatorOrganizationContext,
@@ -211,7 +212,6 @@ export async function getCoordinatorOrganizationContextAction(input?: {
     }
 
     const isPlatformAdmin = current.profile.role === 'admin';
-    const requestedOrgId = input?.organizationId?.trim() ?? '';
 
     const { data: membership, error: memberError } = await client
       .from('organization_members')
@@ -238,34 +238,35 @@ export async function getCoordinatorOrganizationContextAction(input?: {
         }
       | undefined;
 
-    let organizationId: string;
+    const membershipOrgId = coordinatorRow?.organization_id ?? null;
+    const access = resolveCoordinatorOrganizationAccess({
+      isPlatformAdmin,
+      membershipOrganizationId: membershipOrgId,
+      requestedOrganizationId: input?.organizationId,
+    });
 
-    if (
-      isPlatformAdmin &&
-      requestedOrgId &&
-      STRICT_UUID_PATTERN.test(requestedOrgId)
-    ) {
-      organizationId = requestedOrgId;
-      coordinatorRow =
-        coordinatorRow ?? {
-          id: 'platform-admin',
-          organization_id: organizationId,
-          org_role: 'org_admin',
-          branch_id: null,
-        };
-    } else if (coordinatorRow) {
-      organizationId = coordinatorRow.organization_id;
-      if (
-        requestedOrgId &&
-        STRICT_UUID_PATTERN.test(requestedOrgId) &&
-        requestedOrgId !== organizationId
-      ) {
+    if (!access.allowed) {
+      if (access.code === 'foreign_organization') {
         return {
           success: false,
           error: 'Yalnızca bağlı olduğunuz kurumun verilerine erişebilirsiniz.',
         };
       }
-    } else {
+      return {
+        success: false,
+        error: 'Bu işlem için kurum koordinatörü veya yönetici yetkisi gerekir.',
+      };
+    }
+
+    const organizationId = access.organizationId;
+    if (isPlatformAdmin && !coordinatorRow) {
+      coordinatorRow = {
+        id: 'platform-admin',
+        organization_id: organizationId,
+        org_role: 'org_admin',
+        branch_id: null,
+      };
+    } else if (!coordinatorRow) {
       return {
         success: false,
         error: 'Bu işlem için kurum koordinatörü veya yönetici yetkisi gerekir.',

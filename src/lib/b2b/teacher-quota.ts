@@ -69,3 +69,21 @@ export function computeTeacherLicenseSnapshot(
   const resolvedQuota = resolveTeacherQuota(teacherQuotaRaw, studentQuotaRaw);
   return computeTeacherSeatUsage(teachersUsed, resolvedQuota);
 }
+
+/** Dashboard / audit sözleşmesi — doluluk bayrakları. */
+export function buildTeacherQuotaSnapshot(
+  teachersUsed: number,
+  teacherQuotaRaw: number | null | undefined,
+  studentQuotaRaw: number | null | undefined,
+) {
+  const base = computeTeacherLicenseSnapshot(
+    teachersUsed,
+    teacherQuotaRaw,
+    studentQuotaRaw,
+  );
+  return {
+    ...base,
+    isFull: base.isTeacherQuotaFull,
+    isOverQuota: base.teachersUsed > base.teacherQuota,
+  };
+}
