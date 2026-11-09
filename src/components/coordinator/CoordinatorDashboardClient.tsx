@@ -21,6 +21,7 @@ import {
   rotateCoordinatorJoinCodeAction,
 } from '@/lib/b2b/coordinator-actions';
 import { CoordinatorManagementDesk } from '@/components/coordinator/CoordinatorManagementDesk';
+import { CoordinatorOrgSwitcher } from '@/components/coordinator/CoordinatorOrgSwitcher';
 import type { CoordinatorDashboardData } from '@/app/coordinator/coordinator-dashboard-types';
 import {
   formatJoinCodeDisplay,
@@ -136,6 +137,7 @@ export interface CoordinatorDashboardClientProps {
   coordinatorName: string;
   profileEmail: string;
   dashboard: CoordinatorDashboardData;
+  isPlatformAdmin: boolean;
 }
 
 export function CoordinatorDashboardClient({
@@ -143,6 +145,7 @@ export function CoordinatorDashboardClient({
   coordinatorName,
   profileEmail,
   dashboard,
+  isPlatformAdmin,
 }: CoordinatorDashboardClientProps): ReactNode {
   const context = dashboard.context;
   const router = useRouter();
@@ -261,6 +264,12 @@ export function CoordinatorDashboardClient({
         />
 
         <div className="min-w-0 w-full flex-1 space-y-6">
+          {isPlatformAdmin && dashboard.adminOrganizationOptions.length > 0 ? (
+            <CoordinatorOrgSwitcher
+              organizations={dashboard.adminOrganizationOptions}
+              selectedOrganizationId={dashboard.selectedOrganizationId}
+            />
+          ) : null}
           {activeTab === 'overview' ? (
             <>
               <div className="flex flex-wrap items-center justify-end gap-2">

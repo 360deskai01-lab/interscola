@@ -10,6 +10,7 @@ export interface CoordinatorDashboardShellProps {
   coordinatorName: string;
   profileEmail: string;
   dashboard: CoordinatorDashboardData;
+  isPlatformAdmin: boolean;
 }
 
 function CoordinatorDashboardShellInner(
@@ -17,7 +18,9 @@ function CoordinatorDashboardShellInner(
 ): ReactNode {
   const searchParams = useSearchParams();
   const activeTab = parseCoordinatorDashboardTab(searchParams.get('tab'));
-  return <CoordinatorDashboardClient {...props} activeTab={activeTab} />;
+  return (
+    <CoordinatorDashboardClient {...props} activeTab={activeTab} />
+  );
 }
 
 export function CoordinatorDashboardShell(

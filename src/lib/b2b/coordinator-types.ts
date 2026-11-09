@@ -58,6 +58,12 @@ export interface CoordinatorOrganizationSummary {
   seatsRemaining: number | null;
   usagePercent: number | null;
   isQuotaFull: boolean;
+  /** Çözümlenmiş öğretmen kotası (DB veya fallback). */
+  teacherQuota: number;
+  teachersUsed: number;
+  teachersRemaining: number;
+  teacherUsagePercent: number;
+  isTeacherQuotaFull: boolean;
 }
 
 export interface CoordinatorOrganizationContext {

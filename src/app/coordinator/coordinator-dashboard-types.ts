@@ -25,8 +25,16 @@ export type CoordinatorDashboardLicenseSnapshot = {
   seatsRemaining: number | null;
   usagePercent: number | null;
   isQuotaFull: boolean;
-  teachersActive: number;
-  teacherQuota: number | null;
+  teachersUsed: number;
+  teacherQuota: number;
+  teachersRemaining: number;
+  teacherUsagePercent: number;
+  isTeacherQuotaFull: boolean;
+};
+
+export type CoordinatorAdminOrganizationOption = {
+  id: string;
+  name: string;
 };
 
 export type CoordinatorDashboardData = {
@@ -34,4 +42,7 @@ export type CoordinatorDashboardData = {
   license: CoordinatorDashboardLicenseSnapshot;
   joinCode: string | null;
   teachersWithLoad: CoordinatorTeacherWorkloadRow[];
+  /** Platform admin kurum seçici — standart koordinatörde boş. */
+  adminOrganizationOptions: CoordinatorAdminOrganizationOption[];
+  selectedOrganizationId: string;
 };

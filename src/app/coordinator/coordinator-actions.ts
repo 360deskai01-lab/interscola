@@ -1,10 +1,15 @@
 'use server';
 
 import { getCurrentProfile } from '@/lib/auth';
-import { getCoordinatorOrganizationContextAction } from '@/lib/b2b/coordinator-actions';
+import {
+  getCoordinatorOrganizationContextAction,
+  listActiveOrganizationsForCoordinatorAdmin,
+} from '@/lib/b2b/coordinator-actions';
 import { isCoordinatorEligibleOrgRole } from '@/lib/b2b/coordinator-types';
+import { STRICT_UUID_PATTERN } from '@/lib/uuid-patterns';
 import type {
   ApprovedCoordinatorSession,
+  CoordinatorAdminOrganizationOption,
   CoordinatorDashboardData,
   CoordinatorDashboardLicenseSnapshot,
   CoordinatorTeacherWorkloadRow,
@@ -114,7 +119,20 @@ export async function requireApprovedCoordinator(): Promise<ApprovedCoordinatorS
   };
 }
 
-export async function getCoordinatorDashboardDataAction(): Promise<{
+function resolveOrganizationIdForAdmin(
+  requestedOrgId: string | undefined,
+  options: CoordinatorAdminOrganizationOption[],
+): string | null {
+  if (requestedOrgId && STRICT_UUID_PATTERN.test(requestedOrgId)) {
+    const match = options.find((o) => o.id === requestedOrgId);
+    if (match) return match.id;
+  }
+  return options[0]?.id ?? null;
+}
+
+export async function getCoordinatorDashboardDataAction(input?: {
+  organizationId?: string;
+}): Promise<{
   success: boolean;
   error?: string;
   data?: CoordinatorDashboardData;
@@ -127,15 +145,35 @@ export async function getCoordinatorDashboardDataAction(): Promise<{
     };
   }
 
-  const contextResult = await getCoordinatorOrganizationContextAction();
+  let adminOrganizationOptions: CoordinatorAdminOrganizationOption[] = [];
+  let organizationId = input?.organizationId?.trim();
+
+  if (gate.isPlatformAdmin) {
+    const orgList = await listActiveOrganizationsForCoordinatorAdmin();
+    if (!orgList.success) {
+      return { success: false, error: orgList.error ?? 'Kurum listesi okunamadı.' };
+    }
+    adminOrganizationOptions = orgList.organizations ?? [];
+    const resolved = resolveOrganizationIdForAdmin(
+      organizationId,
+      adminOrganizationOptions,
+    );
+    if (!resolved) {
+      return {
+        success: false,
+        error: 'Görüntülenecek aktif kurum bulunamadı.',
+      };
+    }
+    organizationId = resolved;
+  }
+
+  const contextResult = await getCoordinatorOrganizationContextAction(
+    organizationId ? { organizationId } : undefined,
+  );
   if (!contextResult.success || !contextResult.data) {
     return {
       success: false,
-      error:
-        contextResult.error ??
-        (gate.isPlatformAdmin
-          ? 'Platform yöneticisi için bağlı kurum üyeliği bulunamadı.'
-          : 'Kurum verisi yüklenemedi.'),
+      error: contextResult.error ?? 'Kurum verisi yüklenemedi.',
     };
   }
 
@@ -176,8 +214,11 @@ export async function getCoordinatorDashboardDataAction(): Promise<{
     seatsRemaining: org.seatsRemaining,
     usagePercent: org.usagePercent,
     isQuotaFull: org.isQuotaFull,
-    teachersActive: context.teachers.length,
-    teacherQuota: null,
+    teachersUsed: org.teachersUsed,
+    teacherQuota: org.teacherQuota,
+    teachersRemaining: org.teachersRemaining,
+    teacherUsagePercent: org.teacherUsagePercent,
+    isTeacherQuotaFull: org.isTeacherQuotaFull,
   };
 
   return {
@@ -187,6 +228,8 @@ export async function getCoordinatorDashboardDataAction(): Promise<{
       license,
       joinCode: org.joinCode,
       teachersWithLoad,
+      adminOrganizationOptions,
+      selectedOrganizationId: org.id,
     },
   };
 }

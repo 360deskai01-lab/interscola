@@ -128,21 +128,33 @@ export function CoordinatorManagementDesk({
           label="Eğitmen kadrosu"
           icon={<Users className="size-4 text-indigo-300" aria-hidden />}
         >
-          <p className="text-2xl font-semibold text-white">
-            {license.teachersActive}{' '}
-            <span className="text-base font-normal text-slate-400">
-              aktif öğretmen
-            </span>
+          <p className="text-2xl font-semibold tabular-nums text-white">
+            {license.teachersUsed} / {license.teacherQuota}{' '}
+            <span className="text-base font-normal text-slate-400">lisans</span>
           </p>
-          {license.teacherQuota !== null ? (
-            <p className="mt-2 text-xs text-slate-500">
-              Kota: {license.teachersActive}/{license.teacherQuota}
+          <div className="mt-3 space-y-1.5">
+            <div
+              className="h-2.5 overflow-hidden rounded-full bg-slate-800"
+              role="progressbar"
+              aria-valuenow={license.teacherUsagePercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              <div
+                className={`h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 ${
+                  license.isTeacherQuotaFull
+                    ? 'from-amber-500 to-rose-500'
+                    : ''
+                }`}
+                style={{ width: `${license.teacherUsagePercent}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              {license.isTeacherQuotaFull
+                ? 'Öğretmen kotası dolu.'
+                : `${license.teachersRemaining} boş öğretmen koltuğu`}
             </p>
-          ) : (
-            <p className="mt-2 text-xs text-slate-500">
-              Öğretmen lisans kotası tanımlı değil
-            </p>
-          )}
+          </div>
         </MetricCard>
 
         <MetricCard

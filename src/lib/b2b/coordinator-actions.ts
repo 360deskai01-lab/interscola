@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/auth';
 import { computeSeatUsage } from '@/lib/b2b/license-quota';
+import { computeTeacherLicenseSnapshot } from '@/lib/b2b/teacher-quota';
 import {
   type CoordinatorOrganizationContext,
   isCoordinatorEligibleOrgRole,
@@ -43,13 +44,78 @@ function studentTargetExamLabels(
   return labels;
 }
 
+type OrganizationRowDb = {
+  id: string;
+  name: string;
+  license_type: string | null;
+  student_quota: number | null;
+  teacher_quota?: number | null;
+  valid_until: string | null;
+  is_active: boolean | null;
+  join_code?: string | null;
+};
+
+async function fetchOrganizationRow(
+  client: NonNullable<Awaited<ReturnType<typeof getStudentProfileDbClient>>>,
+  organizationId: string,
+): Promise<
+  { ok: true; row: OrganizationRowDb } | { ok: false; error: string }
+> {
+  const withTeacher = await client
+    .from('organizations')
+    .select(
+      'id, name, license_type, student_quota, teacher_quota, valid_until, is_active, join_code',
+    )
+    .eq('id', organizationId)
+    .maybeSingle();
+
+  if (!withTeacher.error && withTeacher.data) {
+    return { ok: true, row: withTeacher.data as OrganizationRowDb };
+  }
+
+  if (withTeacher.error?.code === '42703') {
+    const fallback = await client
+      .from('organizations')
+      .select(
+        'id, name, license_type, student_quota, valid_until, is_active, join_code',
+      )
+      .eq('id', organizationId)
+      .maybeSingle();
+    if (fallback.error || !fallback.data) {
+      return { ok: false, error: 'Kurum bilgisi okunamadı.' };
+    }
+    return {
+      ok: true,
+      row: {
+        ...(fallback.data as OrganizationRowDb),
+        teacher_quota: null,
+      },
+    };
+  }
+
+  if (withTeacher.error) {
+    console.error('[coordinator] Kurum okuma:', withTeacher.error.message);
+    return { ok: false, error: 'Kurum bilgisi okunamadı.' };
+  }
+
+  return { ok: false, error: 'Kurum bulunamadı.' };
+}
+
 async function assertCoordinatorMembership(
   client: Awaited<ReturnType<typeof getStudentProfileDbClient>>,
   userId: string,
   organizationId: string,
+  options?: { allowPlatformAdmin?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!client) {
     return { ok: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+  }
+
+  if (options?.allowPlatformAdmin) {
+    const current = await getCurrentProfile();
+    if (current?.profile.role === 'admin' && current.profile.status === 'approved') {
+      return { ok: true };
+    }
   }
 
   const { data: membership, error } = await client
@@ -77,7 +143,55 @@ async function assertCoordinatorMembership(
   return { ok: true };
 }
 
-export async function getCoordinatorOrganizationContextAction(): Promise<{
+export async function listActiveOrganizationsForCoordinatorAdmin(): Promise<{
+  success: boolean;
+  error?: string;
+  organizations?: { id: string; name: string }[];
+}> {
+  try {
+    const current = await getCurrentProfile();
+    if (!current || current.profile.status !== 'approved') {
+      return { success: false, error: 'Onaylı oturum gerekli.' };
+    }
+    if (current.profile.role !== 'admin') {
+      return { success: true, organizations: [] };
+    }
+
+    const client = await getStudentProfileDbClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const { data, error } = await client
+      .from('organizations')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('[coordinator] Aktif kurumlar:', error.message);
+      return { success: false, error: 'Kurum listesi okunamadı.' };
+    }
+
+    return {
+      success: true,
+      organizations: (data ?? []).map((row) => {
+        const r = row as { id: string; name: string };
+        return { id: r.id, name: r.name };
+      }),
+    };
+  } catch (error) {
+    console.error(
+      '[coordinator] listActiveOrganizationsForCoordinatorAdmin:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Beklenmeyen bir hata oluştu.' };
+  }
+}
+
+export async function getCoordinatorOrganizationContextAction(input?: {
+  organizationId?: string;
+}): Promise<{
   success: boolean;
   error?: string;
   data?: CoordinatorOrganizationContext;
@@ -96,6 +210,9 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
+    const isPlatformAdmin = current.profile.role === 'admin';
+    const requestedOrgId = input?.organizationId?.trim() ?? '';
+
     const { data: membership, error: memberError } = await client
       .from('organization_members')
       .select('id, organization_id, org_role, branch_id')
@@ -108,7 +225,7 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
       return { success: false, error: 'Kurum yetkisi okunamadı.' };
     }
 
-    const coordinatorRow = (membership ?? []).find((row) =>
+    let coordinatorRow = (membership ?? []).find((row) =>
       isCoordinatorEligibleOrgRole(
         (row as { org_role?: string }).org_role ?? null,
       ),
@@ -121,23 +238,48 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
         }
       | undefined;
 
-    if (!coordinatorRow) {
+    let organizationId: string;
+
+    if (
+      isPlatformAdmin &&
+      requestedOrgId &&
+      STRICT_UUID_PATTERN.test(requestedOrgId)
+    ) {
+      organizationId = requestedOrgId;
+      coordinatorRow =
+        coordinatorRow ?? {
+          id: 'platform-admin',
+          organization_id: organizationId,
+          org_role: 'org_admin',
+          branch_id: null,
+        };
+    } else if (coordinatorRow) {
+      organizationId = coordinatorRow.organization_id;
+      if (
+        requestedOrgId &&
+        STRICT_UUID_PATTERN.test(requestedOrgId) &&
+        requestedOrgId !== organizationId
+      ) {
+        return {
+          success: false,
+          error: 'Yalnızca bağlı olduğunuz kurumun verilerine erişebilirsiniz.',
+        };
+      }
+    } else {
       return {
         success: false,
         error: 'Bu işlem için kurum koordinatörü veya yönetici yetkisi gerekir.',
       };
     }
 
-    const organizationId = coordinatorRow.organization_id;
+    const orgFetch = await fetchOrganizationRow(client, organizationId);
+    if (!orgFetch.ok) {
+      return { success: false, error: orgFetch.error };
+    }
 
-    const [orgResult, branchResult, membersResult] = await Promise.all([
-      client
-        .from('organizations')
-        .select(
-          'id, name, license_type, student_quota, valid_until, is_active, join_code',
-        )
-        .eq('id', organizationId)
-        .maybeSingle(),
+    const org = orgFetch.row;
+
+    const [branchResult, membersResult] = await Promise.all([
       client
         .from('branches')
         .select('id, name, city')
@@ -149,20 +291,6 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
         .eq('organization_id', organizationId)
         .eq('is_active', true),
     ]);
-
-    if (orgResult.error || !orgResult.data) {
-      return { success: false, error: 'Kurum bilgisi okunamadı.' };
-    }
-
-    const org = orgResult.data as {
-      id: string;
-      name: string;
-      license_type: string | null;
-      student_quota: number | null;
-      valid_until: string | null;
-      is_active: boolean | null;
-      join_code?: string | null;
-    };
 
     const branches = (branchResult.data ?? []) as {
       id: string;
@@ -181,7 +309,13 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
     }[];
 
     const seatsUsed = memberRows.filter((m) => m.org_role === 'student').length;
+    const teachersUsed = memberRows.filter((m) => m.org_role === 'teacher').length;
     const seatUsage = computeSeatUsage(seatsUsed, org.student_quota);
+    const teacherUsage = computeTeacherLicenseSnapshot(
+      teachersUsed,
+      org.teacher_quota ?? null,
+      org.student_quota,
+    );
 
     const userIds = [...new Set(memberRows.map((m) => m.user_id))];
     const profileById = new Map<
@@ -302,6 +436,11 @@ export async function getCoordinatorOrganizationContextAction(): Promise<{
         seatsRemaining: seatUsage.seatsRemaining,
         usagePercent: seatUsage.usagePercent,
         isQuotaFull: seatUsage.isQuotaFull,
+        teacherQuota: teacherUsage.teacherQuota,
+        teachersUsed: teacherUsage.teachersUsed,
+        teachersRemaining: teacherUsage.teachersRemaining,
+        teacherUsagePercent: teacherUsage.usagePercent,
+        isTeacherQuotaFull: teacherUsage.isTeacherQuotaFull,
       },
       branches: branches.map((b) => ({
         id: b.id,
@@ -368,7 +507,13 @@ export async function rotateCoordinatorJoinCodeAction(input: {
     }
 
     const orgRole = (membership as { org_role?: string } | null)?.org_role;
-    if (!membership || !isCoordinatorEligibleOrgRole(orgRole)) {
+    const adminBypass =
+      current.profile.role === 'admin' &&
+      current.profile.status === 'approved';
+    if (
+      !adminBypass &&
+      (!membership || !isCoordinatorEligibleOrgRole(orgRole))
+    ) {
       return {
         success: false,
         error:
@@ -457,6 +602,7 @@ export async function getCoordinatorStudentDetailAction(input: {
       client,
       current.user.id,
       orgId,
+      { allowPlatformAdmin: true },
     );
     if (!gate.ok) {
       return { success: false, error: gate.error };

@@ -13,7 +13,13 @@ export const instant = false;
 /**
  * B2B kurum koordinatörü portalı — dinamik oturum + kurum verisi (prerender yok).
  */
-export default async function CoordinatorPage(): Promise<ReactNode> {
+type CoordinatorPageProps = {
+  searchParams: Promise<{ orgId?: string; tab?: string }>;
+};
+
+export default async function CoordinatorPage(
+  props: CoordinatorPageProps,
+): Promise<ReactNode> {
   await connection();
 
   const coordinator = await requireApprovedCoordinator();
@@ -21,7 +27,12 @@ export default async function CoordinatorPage(): Promise<ReactNode> {
     redirect('/auth/login');
   }
 
-  const dashboardResult = await getCoordinatorDashboardDataAction();
+  const searchParams = await props.searchParams;
+  const requestedOrgId = searchParams.orgId?.trim();
+
+  const dashboardResult = await getCoordinatorDashboardDataAction(
+    requestedOrgId ? { organizationId: requestedOrgId } : undefined,
+  );
   if (!dashboardResult.success || !dashboardResult.data) {
     console.warn(
       '[coordinator-page] Masası yüklenemedi:',
@@ -38,6 +49,7 @@ export default async function CoordinatorPage(): Promise<ReactNode> {
           coordinatorName={coordinator.fullName}
           profileEmail={coordinator.email ?? ''}
           dashboard={dashboardResult.data}
+          isPlatformAdmin={coordinator.isPlatformAdmin}
         />
       </div>
     </div>
