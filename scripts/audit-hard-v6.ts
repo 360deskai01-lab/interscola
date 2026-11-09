@@ -1,6 +1,7 @@
 /**
  * Hard Audit Harness 6.0 — B2B kota, admin geçişi, misafir claim, kurumsal A4 (DB/HTTP yok).
  */
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { resolveCoordinatorOrganizationAccess } from '../src/lib/b2b/coordinator-org-access';
@@ -13,6 +14,8 @@ import {
   extractWeaknessTopicsFromEvaluation,
   topWeaknessTopics,
 } from '../src/lib/b2b/weakness-ledger-topics';
+import { orgJoinTeacherQuotaFullMessage } from '../src/lib/b2b/license-quota';
+import { OBSERVER_INVALID_TOKEN_ERROR } from '../src/lib/observer/observer-dashboard-types';
 import { GUEST_DIAGNOSTIC_RESULT_KEY } from '../src/lib/guest-lead/constants';
 import {
   buildGuestDiagnosticClaimPayload,
@@ -298,6 +301,53 @@ function runGroup5WeaknessLedger(): void {
   );
 }
 
+const OBSERVER_HEX_TOKEN_PATTERN = /^[a-f0-9]{32}$/i;
+
+function runGroup6ObserverTeacherContracts(): void {
+  console.log('\n=== Grup 6: Observer token & öğretmen katılım sözleşmesi ===');
+
+  const sampleToken = randomBytes(16).toString('hex');
+  assert(
+    'observer: 32 hex token üretimi regex',
+    sampleToken.length === 32 && OBSERVER_HEX_TOKEN_PATTERN.test(sampleToken),
+  );
+
+  assert(
+    'observer: GEÇERSİZ_VEYA_SÜRESİ_DOLMUŞ_BAĞLANTI sabiti',
+    OBSERVER_INVALID_TOKEN_ERROR === 'GEÇERSİZ_VEYA_SÜRESİ_DOLMUŞ_BAĞLANTI',
+  );
+
+  const quotaMsg = orgJoinTeacherQuotaFullMessage(10, 10);
+  assert(
+    'teacher-join: orgJoinTeacherQuotaFullMessage (used/quota)',
+    quotaMsg.includes('(10/10)') &&
+      quotaMsg.includes('öğretmen lisans kapasitesi dolmuştur'),
+  );
+
+  const migration = readSrc(
+    'supabase/migrations/20261109150000_student_observer_tokens.sql',
+  );
+  assert(
+    'observer: student_observer_tokens tablo migration',
+    migration.includes('CREATE TABLE') &&
+      migration.includes('student_observer_tokens'),
+  );
+  assert(
+    'observer: token_format CHECK 32 hex',
+    migration.includes("token ~ '^[a-f0-9]{32}$'"),
+  );
+
+  const observerActions = readSrc('src/app/student/observer-actions.ts');
+  assert(
+    'observer: createObserverTokenAction tanımlı',
+    observerActions.includes('createObserverTokenAction'),
+  );
+  assert(
+    'observer: randomBytes(16).toString(\'hex\')',
+    observerActions.includes("randomBytes(16).toString('hex')"),
+  );
+}
+
 function main(): void {
   console.log('Interscola Hard Audit Harness 6.0\n');
   runGroup1TeacherQuota();
@@ -305,6 +355,7 @@ function main(): void {
   runGroup3GuestClaim();
   runGroup4InstitutionalA4();
   runGroup5WeaknessLedger();
+  runGroup6ObserverTeacherContracts();
 
   console.log('\n--- Özet ---');
   console.log(`Toplam assertion: ${passed + failed}`);

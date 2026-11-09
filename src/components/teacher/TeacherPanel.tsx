@@ -46,6 +46,7 @@ import { TeacherAssignmentsProgressSection } from '@/components/teacher/TeacherA
 import { TeacherLibrarySection } from '@/components/teacher/TeacherLibrarySection';
 import { TeacherMessagesHubSection } from '@/components/teacher/TeacherMessagesHubSection';
 import { TeacherSidebar } from '@/components/teacher/TeacherSidebar';
+import { TeacherOrganizationJoinCard } from '@/components/teacher/TeacherOrganizationJoinCard';
 import { FacultyBoardModal } from '@/components/teacher/FacultyBoardModal';
 import { WeeklyDigestModal } from '@/components/teacher/WeeklyDigestModal';
 import {
@@ -77,6 +78,9 @@ interface TeacherPanelProps {
   assignmentProgress: TeacherAssignmentProgressRow[];
   assignmentStudentPool: TeacherAssignmentStudentOption[];
   orgContext: TeacherOrganizationContext | null;
+  onJoinOrganization: (
+    joinCode: string,
+  ) => Promise<{ success: boolean; message: string; orgName?: string }>;
   onCreateInvite: () => Promise<{
     success: boolean;
     error?: string;
@@ -246,6 +250,7 @@ export function TeacherPanel({
   assignmentProgress,
   assignmentStudentPool,
   orgContext,
+  onJoinOrganization,
   onCreateInvite,
   onRemoveStudent,
   onCreateLibrary,
@@ -348,6 +353,10 @@ export function TeacherPanel({
 
         {activeTab === 'overview' ? (
           <div className="space-y-6">
+            <TeacherOrganizationJoinCard
+              initialOrgContext={orgContext}
+              onJoinOrganization={onJoinOrganization}
+            />
             <TeacherExamRadarChip exam={nearestOfficialExam} />
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

@@ -37,6 +37,9 @@ export interface TeacherDashboardShellProps {
   assignmentProgress: TeacherAssignmentProgressRow[];
   assignmentStudentPool: TeacherAssignmentStudentOption[];
   orgContext: TeacherOrganizationContext | null;
+  onJoinOrganization: (
+    joinCode: string,
+  ) => Promise<{ success: boolean; message: string; orgName?: string }>;
   onCreateInvite: () => Promise<{
     success: boolean;
     error?: string;

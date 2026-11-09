@@ -7,6 +7,7 @@ import { getCurrentProfile } from '@/lib/auth';
 import {
   createInviteFormAction,
   getTeacherOrganizationContextAction,
+  joinTeacherOrganizationByCodeAction,
   getStudentAnalyticsForTeacherFormAction,
   getStudentCareerInsightForTeacherFormAction,
   getTeacherStudentsAction,
@@ -198,6 +199,7 @@ export default async function TeacherDashboardPage({
           assignmentProgress={assignmentProgress}
           assignmentStudentPool={assignmentStudentPool}
           orgContext={orgContext}
+          onJoinOrganization={joinTeacherOrganizationByCodeAction}
           onCreateInvite={createInviteFormAction}
           onRemoveStudent={removeStudentFormAction}
           onCreateLibrary={createLibraryFormAction}

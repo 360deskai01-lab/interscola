@@ -1,30 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  useMemo,
-  useState,
-  useTransition,
-  type ReactNode,
-} from 'react';
-import {
-  Building2,
-  CheckCircle2,
-  Copy,
-  Loader2,
-  RefreshCw,
-  School,
-  Shield,
-  UserRound,
-} from 'lucide-react';
+import { useState, useTransition, type ReactNode } from 'react';
+import { Building2, CheckCircle2, Loader2, School, UserRound } from 'lucide-react';
 import type { LinkedTeacher } from '@/app/student/actions';
 import type { JoinOrganizationResult, StudentOrganizationLink } from '@/lib/student-profile/types';
 import { claimInviteFormAction } from '@/app/student/actions';
-import {
-  joinOrganizationByCodeAction,
-  regenerateStudentObserverTokenAction,
-} from '@/app/student/profile-actions';
-import { absoluteUrl } from '@/lib/seo/site-url';
+import { joinOrganizationByCodeAction } from '@/app/student/profile-actions';
+import type { StudentObserverTokenRow } from '@/app/student/observer-actions';
+import { StudentObserverLinkPanel } from '@/components/student/StudentObserverLinkPanel';
 import {
   JOIN_CODE_LENGTH,
   JOIN_CODE_PATTERN,
@@ -37,41 +21,21 @@ import { StudentHubNav } from '@/components/student/StudentHubNav';
 interface StudentConnectionsClientProps {
   teachers: LinkedTeacher[];
   organization: StudentOrganizationLink | null;
-  /** Boş: henüz atanmamış token; "Yenile" ile üretilebilir. */
-  observerToken: string;
+  observerTokens: StudentObserverTokenRow[];
 }
 
 export function StudentConnectionsClient({
   teachers,
   organization: initialOrg,
-  observerToken: initialToken,
+  observerTokens,
 }: StudentConnectionsClientProps): ReactNode {
   const [organization, setOrganization] = useState(initialOrg);
-  const [observerToken, setObserverToken] = useState(initialToken);
   const [inviteCode, setInviteCode] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [claimPending, startClaim] = useTransition();
   const [joinPending, startJoin] = useTransition();
-  const [rotatePending, startRotate] = useTransition();
-
-  const observerUrl = useMemo(() => {
-    const t = observerToken.trim();
-    if (!t) return '';
-    return absoluteUrl(`/observe/${t}`);
-  }, [observerToken]);
-
-  async function copyText(label: string, text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(label);
-      setTimeout(() => setCopiedKey(null), 2000);
-    } catch {
-      setError('Panoya kopyalanamadı.');
-    }
-  }
 
   function handleClaimInvite() {
     setError(null);
@@ -121,20 +85,6 @@ export function StudentConnectionsClient({
         });
       }
       setJoinCode('');
-    });
-  }
-
-  function handleRotateObserver() {
-    setError(null);
-    setSuccess(null);
-    startRotate(async () => {
-      const result = await regenerateStudentObserverTokenAction();
-      if (!result.success || !result.token) {
-        setError(result.error ?? 'Bağlantı yenilenemedi.');
-        return;
-      }
-      setObserverToken(result.token);
-      setSuccess('Veli takip bağlantısı yenilendi. Eski link artık geçersiz.');
     });
   }
 
@@ -303,61 +253,7 @@ export function StudentConnectionsClient({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-lg" aria-hidden>
-                  👪
-                </span>
-                <h2 className="text-sm font-medium text-slate-200">
-                  Veli & gözlemci erişimi
-                </h2>
-                <span className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-0.5 text-[10px] text-slate-500">
-                  <Shield className="size-3" />
-                  Salt okunur
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Bu bağlantıyı güvenilir bir veli veya gözlemci ile paylaş.
-                Yenilediğinde eski bağlantı geçersiz olur.
-              </p>
-              {!observerUrl ? (
-                <p className="mt-3 text-xs text-amber-200/90">
-                  Gözlemci bağlantın henüz oluşturulmadı. Aşağıdaki
-                  &quot;Yenile&quot; ile güvenli bir link üretebilirsin.
-                </p>
-              ) : null}
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 font-mono text-xs text-slate-300 break-all">
-                  {observerUrl ||
-                    'Bağlantı oluşturulunca burada görünecek.'}
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => copyText('obs', observerUrl)}
-                    disabled={!observerUrl}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/12 bg-white/[0.06] px-3 py-2 text-xs text-slate-200 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Copy className="size-3.5" />
-                    {copiedKey === 'obs' ? 'Kopyalandı' : 'Kopyala'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleRotateObserver}
-                    disabled={rotatePending}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-60"
-                    title="Yeni güvenli bağlantı üret"
-                  >
-                    {rotatePending ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="size-3.5" />
-                    )}
-                    Yenile
-                  </button>
-                </div>
-              </div>
-            </section>
+            <StudentObserverLinkPanel initialTokens={observerTokens} />
           </div>
         </div>
       </div>

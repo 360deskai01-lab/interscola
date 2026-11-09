@@ -7,6 +7,11 @@ import { getCurrentProfile } from '@/lib/auth';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
+import { TeacherOrganizationJoinCard } from '@/components/teacher/TeacherOrganizationJoinCard';
+import {
+  getTeacherOrganizationContextAction,
+  joinTeacherOrganizationByCodeAction,
+} from '../actions';
 
 export const instant = false;
 
@@ -45,7 +50,13 @@ export default async function TeacherProfilePage(): Promise<ReactNode> {
     redirect('/');
   }
 
-  const expertise = await readTeachingExpertise(current.user.id ?? '');
+  const [expertise, orgContextResult] = await Promise.all([
+    readTeachingExpertise(current.user.id ?? ''),
+    getTeacherOrganizationContextAction(),
+  ]);
+  const orgContext = orgContextResult.success
+    ? orgContextResult.context
+    : null;
 
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
@@ -68,7 +79,12 @@ export default async function TeacherProfilePage(): Promise<ReactNode> {
           </div>
         </div>
 
-        <div className="space-y-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
+        <TeacherOrganizationJoinCard
+          initialOrgContext={orgContext}
+          onJoinOrganization={joinTeacherOrganizationByCodeAction}
+        />
+
+        <div className="mt-6 space-y-6 rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur">
           <div>
             <p className="text-xs font-medium tracking-wide text-slate-500 uppercase">
               Görünen ad

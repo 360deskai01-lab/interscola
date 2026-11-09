@@ -7,7 +7,7 @@ import {
   loadStudentOrganization,
 } from '@/lib/student-profile/load-context';
 import { getStudentTeachersAction } from '@/app/student/actions';
-import { getStudentAcademicProfileAction } from '@/app/student/profile-actions';
+import { listStudentObserverTokensAction } from '@/app/student/observer-actions';
 import { NavbarServer } from '@/components/navigation/NavbarServer';
 import { StudentConnectionsClient } from '@/components/student/StudentConnectionsClient';
 
@@ -22,27 +22,20 @@ export default async function StudentConnectionsPage(): Promise<ReactNode> {
     redirect('/');
   }
 
-  const [teachersResult, client, profileResult] = await Promise.all([
+  const [teachersResult, client, observerTokensResult] = await Promise.all([
     getStudentTeachersAction(),
     getStudentProfileDbClient(),
-    getStudentAcademicProfileAction(),
+    listStudentObserverTokensAction(),
   ]);
 
   const teachers = teachersResult.teachers ?? [];
   const organization = client
     ? await loadStudentOrganization(client, current.user.id)
     : null;
-
-  if (!profileResult.success || !profileResult.data) {
-    return (
-      <div className="min-h-dvh bg-slate-950 text-slate-100">
-        <NavbarServer />
-        <div className="mx-auto max-w-lg px-4 py-12 text-center text-sm text-rose-200">
-          {profileResult.error ?? 'Bağlantılar merkezi yüklenemedi.'}
-        </div>
-      </div>
-    );
-  }
+  const observerTokens =
+    observerTokensResult.success && observerTokensResult.tokens
+      ? observerTokensResult.tokens
+      : [];
 
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
@@ -50,7 +43,7 @@ export default async function StudentConnectionsPage(): Promise<ReactNode> {
       <StudentConnectionsClient
         teachers={teachers}
         organization={organization}
-        observerToken={profileResult.data.observerToken}
+        observerTokens={observerTokens}
       />
     </div>
   );
