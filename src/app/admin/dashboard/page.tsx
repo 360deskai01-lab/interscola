@@ -1,21 +1,18 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { connection } from 'next/server';
-import {
-  ArrowLeft,
-  Building2,
-  Clock,
-  GraduationCap,
-  ListChecks,
-  LogOut,
-  ShieldCheck,
-  Users,
-} from 'lucide-react';
+import { Building2, Clock, ListChecks, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { getCurrentProfile, type ProfileRecord } from '@/lib/auth';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
-import { signOutAdmin, approveUserAction, rejectUserAction } from '../actions';
+import { approveUserAction, rejectUserAction } from '../actions';
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
+import {
+  adminDashboardHref,
+  parseAdminDashboardTab,
+  type AdminDashboardTab,
+} from '@/lib/admin/dashboard-tabs';
 import {
   assignMemberFormAction,
   createBranchFormAction,
@@ -52,43 +49,7 @@ import { IntelligenceSection } from '@/components/admin/IntelligenceSection';
  */
 export const instant = false;
 
-type DashboardFilter =
-  | 'pending'
-  | 'approved'
-  | 'rejected'
-  | 'b2b'
-  | 'universities'
-  | 'intelligence'
-  | 'audit'
-  | 'all'
-  | 'attempts';
-
-const STATUS_TABS: readonly {
-  id: Exclude<DashboardFilter, 'all' | 'attempts'>;
-  label: string;
-}[] = [
-  { id: 'pending', label: 'Onay Bekleyenler' },
-  { id: 'approved', label: 'Onaylananlar' },
-  { id: 'rejected', label: 'Reddedilenler' },
-  { id: 'b2b', label: 'Kurumsal Lisanslar (B2B)' },
-  { id: 'universities', label: '🏛️ Üniversite & Müfredat Yönetimi' },
-  { id: 'intelligence', label: '📡 Otonom İstihbarat' },
-  { id: 'audit', label: '📋 Denetim & Sınav Günlüğü' },
-];
-
 /* Rol ve durum etiketleri `UserTable` bileşenine taşındı. */
-
-function parseDashboardFilter(value: string | undefined): DashboardFilter {
-  if (value === 'approved' || value === 'rejected' || value === 'pending') {
-    return value;
-  }
-  if (value === 'b2b') return 'b2b';
-  if (value === 'universities') return 'universities';
-  if (value === 'intelligence') return 'intelligence';
-  if (value === 'audit' || value === 'attempts') return 'audit';
-  if (value === 'all') return 'all';
-  return 'pending';
-}
 
 /**
  * Tüm profilleri okur. Admin satırları listeye dahil edilmez.
@@ -222,7 +183,7 @@ async function fetchStats(): Promise<DashboardStats> {
 export default async function AdminDashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ tab?: string; status?: string }>;
 }): Promise<ReactNode> {
   /*
    * Prerender'ı durdurur: bu sayfa oturum çerezine ve canlı veriye bağlıdır.
@@ -279,7 +240,10 @@ export default async function AdminDashboardPage({
   }
 
   const params = await searchParams;
-  const activeFilter = parseDashboardFilter(params.status);
+  const activeFilter: AdminDashboardTab = parseAdminDashboardTab(
+    params.tab,
+    params.status,
+  );
 
   const [
     profiles,
@@ -297,12 +261,6 @@ export default async function AdminDashboardPage({
     getGlobalExamAuditLogsAction({ page: 1, limit: 25 }),
   ]);
 
-  const organizationCount = b2bResult.success
-    ? (b2bResult.data?.organizations.length ?? 0)
-    : 0;
-  const universityCount = universitiesResult.success
-    ? (universitiesResult.data?.total ?? 0)
-    : 0;
   const intelligencePendingCount = intelligenceResult.success
     ? (intelligenceResult.data?.pendingCount ?? 0)
     : 0;
@@ -321,7 +279,6 @@ export default async function AdminDashboardPage({
 
   const visible =
     activeFilter === 'b2b' ||
-    activeFilter === 'attempts' ||
     activeFilter === 'universities' ||
     activeFilter === 'intelligence' ||
     activeFilter === 'audit'
@@ -330,6 +287,11 @@ export default async function AdminDashboardPage({
         ? profiles
         : profiles.filter((p) => p.status === activeFilter);
 
+  const adminDisplayName =
+    typeof current.profile.full_name === 'string'
+      ? current.profile.full_name
+      : null;
+
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div
@@ -337,133 +299,54 @@ export default async function AdminDashboardPage({
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(99,102,241,0.18),transparent_60%)]"
       />
 
-      <div className="relative mx-auto w-full max-w-6xl px-5 py-8 sm:px-8">
-        {/* Üst bar */}
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-fuchsia-600 shadow-lg shadow-indigo-900/40">
-              <GraduationCap className="size-6" />
-            </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-lg font-semibold tracking-tight">
-                  Interscola
-                </p>
-                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-0.5 text-xs font-medium text-indigo-200">
-                  <ShieldCheck className="size-3" />
-                  Yönetici Paneli
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-slate-500">
-                {current.user.email}
-              </p>
+      <div className="relative mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          <AdminSidebar
+            activeTab={activeFilter}
+            profileEmail={current.user.email ?? ''}
+            displayName={adminDisplayName}
+            pendingCount={counts.pending}
+            intelligencePendingCount={intelligencePendingCount}
+          />
+
+          <main className="min-w-0 flex-1 space-y-6">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <StatCard
+                href={adminDashboardHref('all')}
+                isActive={activeFilter === 'all'}
+                icon={Users}
+                label="Toplam Kullanıcı"
+                value={counts.total}
+                accent="from-slate-600 to-slate-700"
+                breakdown={`${counts.students} öğrenci · ${counts.teachers} öğretmen`}
+              />
+              <StatCard
+                href={adminDashboardHref('pending')}
+                isActive={activeFilter === 'pending'}
+                icon={Clock}
+                label="Onay Bekleyenler"
+                value={counts.pending}
+                accent="from-amber-400 to-orange-500"
+              />
+              <StatCard
+                href={adminDashboardHref('audit')}
+                isActive={activeFilter === 'audit'}
+                icon={ListChecks}
+                label="Çözülen Deneme"
+                value={auditTotalCount}
+                accent="from-sky-400 to-indigo-500"
+              />
+              <StatCard
+                href={adminDashboardHref('b2b')}
+                isActive={activeFilter === 'b2b'}
+                icon={Building2}
+                label="Aktif Kurum"
+                value={stats.organizationsActive}
+                accent="from-fuchsia-400 to-purple-600"
+              />
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-sm text-slate-300 transition hover:border-white/25 hover:text-white"
-            >
-              <ArrowLeft className="size-4" />
-              Ana Sayfa
-            </Link>
-            <form action={signOutAdmin}>
-              <button
-                type="submit"
-                className="flex items-center gap-1.5 rounded-full border border-rose-400/30 bg-rose-500/10 px-3.5 py-1.5 text-sm text-rose-200 transition hover:bg-rose-500/20"
-              >
-                <LogOut className="size-4" />
-                Çıkış Yap
-              </button>
-            </form>
-          </div>
-        </header>
-
-        {/* İstatistik kartları */}
-        <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            href="/admin/dashboard?status=all"
-            isActive={activeFilter === 'all'}
-            icon={Users}
-            label="Toplam Kullanıcı"
-            value={counts.total}
-            accent="from-slate-600 to-slate-700"
-            breakdown={`${counts.students} öğrenci · ${counts.teachers} öğretmen`}
-          />
-          <StatCard
-            href="/admin/dashboard?status=pending"
-            isActive={activeFilter === 'pending'}
-            icon={Clock}
-            label="Onay Bekleyenler"
-            value={counts.pending}
-            accent="from-amber-400 to-orange-500"
-          />
-          <StatCard
-            href="/admin/dashboard?status=audit"
-            isActive={activeFilter === 'audit'}
-            icon={ListChecks}
-            label="Çözülen Deneme"
-            value={auditTotalCount}
-            accent="from-sky-400 to-indigo-500"
-          />
-          <StatCard
-            href="/admin/dashboard?status=b2b"
-            isActive={activeFilter === 'b2b'}
-            icon={Building2}
-            label="Aktif Kurum"
-            value={stats.organizationsActive}
-            accent="from-fuchsia-400 to-purple-600"
-          />
-        </div>
-
-        {/* Filtre sekmeleri */}
-        <div className="mb-4 flex flex-wrap gap-2">
-          {STATUS_TABS.map((tab) => {
-            const isActive = tab.id === activeFilter;
-            const count =
-              tab.id === 'pending'
-                ? counts.pending
-                : tab.id === 'approved'
-                  ? counts.approved
-                  : tab.id === 'rejected'
-                    ? counts.rejected
-                    : tab.id === 'universities'
-                      ? universityCount
-                      : tab.id === 'intelligence'
-                        ? intelligencePendingCount
-                        : tab.id === 'audit'
-                          ? auditTotalCount
-                          : organizationCount;
-
-            const showIntelBadge =
-              tab.id === 'intelligence' && intelligencePendingCount > 0;
-
-            return (
-              <Link
-                key={tab.id}
-                href={`/admin/dashboard?status=${tab.id}`}
-                className={`relative rounded-full border px-4 py-2 text-sm font-medium transition ${
-                  isActive
-                    ? 'border-indigo-400/60 bg-indigo-500/20 text-indigo-100'
-                    : 'border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/25 hover:text-slate-200'
-                }`}
-              >
-                {showIntelBadge ? (
-                  <span
-                    className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-rose-500 ring-2 ring-slate-950"
-                    aria-label={`${intelligencePendingCount} bekleyen uyarı`}
-                  />
-                ) : null}
-                {tab.label}
-                <span className="ml-2 text-xs opacity-70">{count}</span>
-              </Link>
-            );
-          })}
-        </div>
-
-        {/* Kurumsal lisanslar (B2B) */}
-        {activeFilter === 'b2b' ? (
+            {activeFilter === 'b2b' ? (
           <B2BManagementSection
             data={b2bResult.success ? (b2bResult.data ?? null) : null}
             loadError={b2bResult.success ? undefined : b2bResult.error}
@@ -499,30 +382,32 @@ export default async function AdminDashboardPage({
             initialData={auditResult.success ? (auditResult.data ?? null) : null}
             loadError={auditResult.success ? undefined : auditResult.error}
           />
-        ) : (
-          <UserTable
-            /*
-             * `key` ile remount: `UserTable` lokal kopya tutuyor. Sunucu
-             * verisi yenilendiğinde (router.refresh sonrası) bileşen yeniden
-             * kurulmalı, aksi halde eski liste görünmeye devam eder.
-             */
-            key={`${activeFilter}-${visible.map((p) => p.id).join('-')}`}
-            users={visible.map((profile) => ({
-              id: profile.id,
-              email: profile.email,
-              fullName: profile.full_name,
-              role: profile.role,
-              status: profile.status,
-              createdAt: profile.created_at,
-            }))}
-            onApprove={approveUserAction}
-            onReject={rejectUserAction}
-          />
-        )}
+            ) : (
+              <UserTable
+                /*
+                 * `key` ile remount: `UserTable` lokal kopya tutuyor. Sunucu
+                 * verisi yenilendiğinde (router.refresh sonrası) bileşen yeniden
+                 * kurulmalı, aksi halde eski liste görünmeye devam eder.
+                 */
+                key={`${activeFilter}-${visible.map((p) => p.id).join('-')}`}
+                users={visible.map((profile) => ({
+                  id: profile.id,
+                  email: profile.email,
+                  fullName: profile.full_name,
+                  role: profile.role,
+                  status: profile.status,
+                  createdAt: profile.created_at,
+                }))}
+                onApprove={approveUserAction}
+                onReject={rejectUserAction}
+              />
+            )}
 
-        <p className="mt-6 text-center text-xs text-slate-600">
-          Durum değişiklikleri anında kaydedilir ve panel yenilenir.
-        </p>
+            <p className="text-center text-xs text-slate-600">
+              Durum değişiklikleri anında kaydedilir ve panel yenilenir.
+            </p>
+          </main>
+        </div>
       </div>
     </div>
   );
