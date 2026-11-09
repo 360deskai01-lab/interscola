@@ -47,22 +47,22 @@ export function CoordinatorOrgSwitcher({
 
   return (
     <>
-      <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4">
+      <div className="flex flex-col items-stretch justify-between gap-3 overflow-hidden rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 sm:flex-row sm:items-center sm:p-4">
         <p
           id={labelId}
-          className="flex items-center gap-2 text-sm font-medium text-amber-50"
+          className="flex shrink-0 items-center gap-2 text-sm font-medium text-amber-50"
         >
           <Building2 className="size-4 shrink-0" aria-hidden />
           Kurum görünümü (platform admin)
         </p>
-        <div className="mt-2 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-center">
-          <label className="block sm:min-w-[min(100%,20rem)]">
+        <div className="flex max-w-full min-w-0 items-center gap-2.5 sm:shrink-0">
+          <label className="block min-w-0 flex-1 sm:min-w-[min(100%,16rem)] sm:flex-initial">
             <span className="sr-only">Kurum seçin</span>
             <select
               aria-labelledby={labelId}
               value={selectedOrganizationId}
               onChange={(event) => onChange(event.target.value)}
-              className="w-full rounded-lg border border-white/15 bg-slate-950/80 px-3 py-2.5 text-sm text-slate-100 outline-none ring-indigo-400/40 focus:ring-2"
+              className="h-10 w-full min-w-0 rounded-lg border border-white/15 bg-slate-950/80 px-3 py-1.5 text-sm text-slate-100 outline-none ring-indigo-400/40 focus:ring-2"
             >
               {organizations.map((org) => (
                 <option key={org.id} value={org.id}>
@@ -74,7 +74,7 @@ export function CoordinatorOrgSwitcher({
           <button
             type="button"
             onClick={() => setQuotaModalOpen(true)}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-amber-300/35 bg-amber-500/20 px-3 py-2.5 text-sm font-medium text-amber-50 hover:bg-amber-500/30"
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-amber-300/35 bg-amber-500/20 px-3.5 py-2 text-sm font-medium text-amber-50 hover:bg-amber-500/30"
           >
             <span aria-hidden>⚙️</span>
             Kotaları güncelle
