@@ -15,6 +15,8 @@ import { ExamRunner } from '@/components/exam/ExamRunner';
 import { ExamResultTimedOutBanner } from '@/components/exam/ExamResultCard';
 import { resolveExamSessionDurationSeconds } from '@/lib/exam/exam-session-formats';
 import { buildStudentAnswersPayload } from '@/lib/exam/student-answers-payload';
+import { buildGuestDiagnosticClaimPayload } from '@/lib/test-et/guest-diagnostic-claim';
+import { writeGuestDiagnosticClaimToStorage } from '@/lib/test-et/guest-diagnostic-claim-storage';
 import { scoreGuestDiagnostic } from '@/lib/test-et/guest-diagnostic-scoring';
 import { writeGuestDiagnosticToStorage } from '@/lib/test-et/guest-diagnostic-storage';
 import { testEtHref, type TestEtSlug } from '@/lib/test-et/test-et-config';
@@ -74,6 +76,9 @@ export function GuestDiagnosticSolveClient({
       is_timed_out: timedOutSubmitRef.current,
     });
     writeGuestDiagnosticToStorage(record);
+    writeGuestDiagnosticClaimToStorage(
+      buildGuestDiagnosticClaimPayload(exam, record),
+    );
     router.push(`${testEtHref(slug)}/results`);
   }, [answers, exam, router, slug]);
 

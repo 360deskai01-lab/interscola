@@ -120,7 +120,7 @@ export function GuestDiagnosticTeaserClient({
               href={registerUrlForDiagnostic(record.curriculum)}
               className="mt-5 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-3 text-sm font-semibold text-white"
             >
-              Ücretsiz Hesap Oluştur ve Karneni Kaydet
+              Kaydet ve Portföyü Aç
             </Link>
           </div>
         </div>
