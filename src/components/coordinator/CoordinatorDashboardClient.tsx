@@ -1,16 +1,11 @@
 'use client';
 
 import {
-  BookOpen,
-  Building2,
   Check,
   ClipboardCopy,
-  GraduationCap,
-  Globe2,
   Loader2,
   MapPin,
   RefreshCw,
-  Users,
 } from 'lucide-react';
 import {
   useCallback,
@@ -25,6 +20,8 @@ import {
   getCoordinatorStudentDetailAction,
   rotateCoordinatorJoinCodeAction,
 } from '@/lib/b2b/coordinator-actions';
+import { CoordinatorManagementDesk } from '@/components/coordinator/CoordinatorManagementDesk';
+import type { CoordinatorDashboardData } from '@/app/coordinator/coordinator-dashboard-types';
 import {
   formatJoinCodeDisplay,
   normalizeJoinCodeInput,
@@ -138,15 +135,16 @@ export interface CoordinatorDashboardClientProps {
   activeTab: CoordinatorDashboardTab;
   coordinatorName: string;
   profileEmail: string;
-  context: CoordinatorOrganizationContext;
+  dashboard: CoordinatorDashboardData;
 }
 
 export function CoordinatorDashboardClient({
   activeTab,
   coordinatorName,
   profileEmail,
-  context,
+  dashboard,
 }: CoordinatorDashboardClientProps): ReactNode {
+  const context = dashboard.context;
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [rotatePending, startRotateTransition] = useTransition();
@@ -192,9 +190,6 @@ export function CoordinatorDashboardClient({
     ? formatJoinCodeDisplay(liveJoinCode)
     : '—';
   const perf = context.orgPerformance;
-  const satAvg = perf.avgSatScore;
-  const satMax = perf.maxSatScore;
-  const ieltsAvg = perf.avgIeltsBand;
 
   const copyJoinCode = useCallback(async () => {
     const raw = liveJoinCode?.trim();
@@ -268,51 +263,6 @@ export function CoordinatorDashboardClient({
         <div className="min-w-0 w-full flex-1 space-y-6">
           {activeTab === 'overview' ? (
             <>
-              <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-xl shadow-indigo-950/40 backdrop-blur-sm sm:p-8">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
-                      Kurum komuta merkezi
-                    </p>
-                    <h1 className="text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-                      {org.name}
-                    </h1>
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1">
-                        <Building2 className="size-4 text-indigo-300" />
-                        {branchCurrent}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-violet-100">
-                        <GraduationCap className="size-4 text-violet-200" />
-                        Koordinatör: {coordinatorName}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
-                    <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                      Lisans
-                    </span>
-                    <span
-                      className={`inline-flex rounded-full border px-4 py-1.5 text-sm font-semibold ${
-                        licenseBadge === 'Enterprise'
-                          ? 'border-amber-400/40 bg-amber-500/15 text-amber-100'
-                          : licenseBadge === 'Pilot'
-                            ? 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100'
-                            : 'border-slate-400/30 bg-slate-500/15 text-slate-100'
-                      }`}
-                    >
-                      {licenseBadge}
-                    </span>
-                    {!org.isActive ? (
-                      <span className="text-xs text-amber-200/90">
-                        Kurum lisansı pasif görünüyor; yönetici ile iletişime
-                        geçin.
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              </section>
-
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <button
                   type="button"
@@ -323,128 +273,10 @@ export function CoordinatorDashboardClient({
                   Kurumsal Başarı Raporu (A4)
                 </button>
               </div>
-
-              <section className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Aktif öğretmen
-                  </p>
-                  <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold text-white">
-                    <Users className="size-6 text-indigo-300" />
-                    {context.teachers.length}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Kayıtlı öğrenci
-                  </p>
-                  <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold text-white">
-                    <GraduationCap className="size-6 text-sky-300" />
-                    {context.students.length}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    Çözülen deneme hacmi
-                  </p>
-                  <p className="mt-2 flex items-baseline gap-2 text-2xl font-semibold tabular-nums text-white">
-                    <BookOpen className="size-6 text-violet-300" />
-                    {perf.totalCompletedAttempts}
-                  </p>
-                </div>
-              </section>
-
-              <section className="grid gap-4 lg:grid-cols-3">
-                <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <span aria-hidden>🏛️ </span>
-                    Kurum SAT ortalaması
-                  </p>
-                  {satAvg !== null ? (
-                    <>
-                      <p className="mt-2 text-2xl font-semibold tabular-nums text-white">
-                        {satAvg}
-                        <span className="text-sm font-normal text-slate-400">
-                          {' '}
-                          /1600
-                        </span>
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">
-                        En yüksek:{' '}
-                        <span className="font-medium text-sky-200">
-                          {satMax ?? '—'} /1600
-                        </span>
-                      </p>
-                      <div className="mt-3 space-y-1.5">
-                        <div className="h-2 overflow-hidden rounded-md bg-slate-800">
-                          <div
-                            className="h-full rounded-md bg-gradient-to-r from-sky-500 to-indigo-500"
-                            style={{
-                              width: `${Math.min(100, Math.round((satAvg / 1600) * 100))}%`,
-                            }}
-                          />
-                        </div>
-                        {satMax !== null ? (
-                          <div className="h-2 overflow-hidden rounded-md bg-slate-800">
-                            <div
-                              className="h-full rounded-md bg-gradient-to-r from-cyan-400 to-sky-300"
-                              style={{
-                                width: `${Math.min(100, Math.round((satMax / 1600) * 100))}%`,
-                              }}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">
-                      Henüz kurumsal SAT denemesi yok.
-                    </p>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <span aria-hidden>🌍 </span>
-                    Kurum IELTS ortalaması
-                  </p>
-                  {ieltsAvg !== null ? (
-                    <>
-                      <p className="mt-2 flex items-baseline gap-2">
-                        <span className="inline-flex rounded-md border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-1 text-2xl font-semibold tabular-nums text-emerald-100">
-                          {ieltsAvg.toFixed(1)}
-                        </span>
-                        <Globe2 className="size-5 text-emerald-300/80" aria-hidden />
-                      </p>
-                      <p className="mt-1 text-xs text-slate-400">Ölçek: /9.0 band</p>
-                      <div className="mt-3 h-2 overflow-hidden rounded-md bg-slate-800">
-                        <div
-                          className="h-full rounded-md bg-gradient-to-r from-emerald-500 to-teal-400"
-                          style={{
-                            width: `${Math.min(100, Math.round((ieltsAvg / 9) * 100))}%`,
-                          }}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="mt-3 text-sm text-slate-500">
-                      Henüz kurumsal IELTS denemesi yok.
-                    </p>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-white/10 bg-slate-900/50 p-5 backdrop-blur-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <span aria-hidden>📚 </span>
-                    Başarı radarı özeti
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-400">
-                    Öğrenci masası ve şube hiyerarşisi için sol menüden ilgili
-                    sekmelere geçin. Kota ve katılım kodu yönetimi menüde
-                    görünür.
-                  </p>
-                </div>
-              </section>
+              <CoordinatorManagementDesk
+                dashboard={dashboard}
+                coordinatorName={coordinatorName}
+              />
             </>
           ) : null}
 

@@ -3,13 +3,13 @@
 import { Suspense, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { parseCoordinatorDashboardTab } from '@/lib/coordinator-dashboard/dashboard-tabs';
-import type { CoordinatorOrganizationContext } from '@/lib/b2b/coordinator-types';
+import type { CoordinatorDashboardData } from '@/app/coordinator/coordinator-dashboard-types';
 import { CoordinatorDashboardClient } from '@/components/coordinator/CoordinatorDashboardClient';
 
 export interface CoordinatorDashboardShellProps {
   coordinatorName: string;
   profileEmail: string;
-  context: CoordinatorOrganizationContext;
+  dashboard: CoordinatorDashboardData;
 }
 
 function CoordinatorDashboardShellInner(
