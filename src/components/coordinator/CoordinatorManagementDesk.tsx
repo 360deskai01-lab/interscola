@@ -9,6 +9,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
+import { CoordinatorSchoolReportModal } from '@/components/coordinator/CoordinatorSchoolReportModal';
 import type { CoordinatorDashboardData } from '@/app/coordinator/coordinator-dashboard-types';
 import { formatJoinCodeDisplay } from '@/lib/b2b/join-code';
 
@@ -42,6 +43,7 @@ export function CoordinatorManagementDesk({
   coordinatorName,
 }: CoordinatorManagementDeskProps): ReactNode {
   const [copied, setCopied] = useState(false);
+  const [schoolReportOpen, setSchoolReportOpen] = useState(false);
   const org = dashboard.context.organization;
   const license = dashboard.license;
   const perf = dashboard.context.orgPerformance;
@@ -70,7 +72,7 @@ export function CoordinatorManagementDesk({
   return (
     <div className="space-y-6">
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 p-6 shadow-xl shadow-indigo-950/40 backdrop-blur-sm sm:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-indigo-300/90">
               Şube yönetim masası
@@ -83,6 +85,14 @@ export function CoordinatorManagementDesk({
               <span className="text-slate-200">{coordinatorName}</span>
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setSchoolReportOpen(true)}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-indigo-400/40 bg-gradient-to-r from-indigo-500/25 to-violet-600/25 px-4 py-3 text-sm font-semibold text-indigo-50 shadow-lg shadow-indigo-950/30 transition hover:from-indigo-500/35 hover:to-violet-600/35"
+          >
+            <span aria-hidden>📄</span>
+            Kurumsal Karne (A4 Yazdır / PDF İndir)
+          </button>
         </div>
       </section>
 
@@ -272,6 +282,12 @@ export function CoordinatorManagementDesk({
           </table>
         </div>
       </section>
+
+      <CoordinatorSchoolReportModal
+        open={schoolReportOpen}
+        onClose={() => setSchoolReportOpen(false)}
+        organizationId={org.id}
+      />
     </div>
   );
 }

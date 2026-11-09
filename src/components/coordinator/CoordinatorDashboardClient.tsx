@@ -33,19 +33,9 @@ import type {
   CoordinatorStudentDetail,
 } from '@/lib/b2b/coordinator-types';
 import type { CoordinatorDashboardTab } from '@/lib/coordinator-dashboard/dashboard-tabs';
-import { CoordinatorReportModal } from '@/components/coordinator/CoordinatorReportModal';
 import { CoordinatorSidebar } from '@/components/coordinator/CoordinatorSidebar';
 import { CoordinatorStudentDrawer } from '@/components/coordinator/CoordinatorStudentDrawer';
 import { exportStudentsToCSV } from '@/lib/b2b/coordinator-export';
-
-function licenseBadgeLabel(raw: string | null): string {
-  const t = (raw ?? '').toLowerCase().trim();
-  if (!t) return 'Standart';
-  if (t.includes('enterprise')) return 'Enterprise';
-  if (t.includes('pilot')) return 'Pilot';
-  if (t.includes('standard') || t.includes('standart')) return 'Standart';
-  return raw!.replace(/_/g, ' ');
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -164,7 +154,6 @@ export function CoordinatorDashboardClient({
     useState<CoordinatorStudentDetail | null>(null);
   const [drawerError, setDrawerError] = useState<string | null>(null);
   const [loadingStudentId, setLoadingStudentId] = useState<string | null>(null);
-  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const org = context.organization;
 
@@ -177,14 +166,6 @@ export function CoordinatorDashboardClient({
     () => context.students.filter((m) => memberMatchesBranch(m, branchFilter)),
     [context.students, branchFilter],
   );
-  const branchCurrent = useMemo(() => {
-    const list = context.branches;
-    if (list.length === 0) return 'Merkez (şube tanımsız)';
-    if (list.length === 1) return list[0].name;
-    return `${list.length} kampüs`;
-  }, [context.branches]);
-
-  const licenseBadge = licenseBadgeLabel(org.licenseType);
   useEffect(() => {
     setLiveJoinCode(context.organization.joinCode);
   }, [context.organization.joinCode]);
@@ -192,7 +173,6 @@ export function CoordinatorDashboardClient({
   const joinCodeDisplay = liveJoinCode?.trim()
     ? formatJoinCodeDisplay(liveJoinCode)
     : '—';
-  const perf = context.orgPerformance;
 
   const copyJoinCode = useCallback(async () => {
     const raw = liveJoinCode?.trim();
@@ -271,22 +251,10 @@ export function CoordinatorDashboardClient({
             />
           ) : null}
           {activeTab === 'overview' ? (
-            <>
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReportModalOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-400/35 bg-indigo-500/15 px-4 py-2.5 text-sm font-medium text-indigo-100 transition hover:bg-indigo-500/25"
-                >
-                  <span aria-hidden>📄</span>
-                  Kurumsal Başarı Raporu (A4)
-                </button>
-              </div>
-              <CoordinatorManagementDesk
-                dashboard={dashboard}
-                coordinatorName={coordinatorName}
-              />
-            </>
+            <CoordinatorManagementDesk
+              dashboard={dashboard}
+              coordinatorName={coordinatorName}
+            />
           ) : null}
 
           {activeTab === 'codes' ? (
@@ -625,16 +593,6 @@ export function CoordinatorDashboardClient({
         onClose={() => setDrawerOpen(false)}
       />
 
-      <CoordinatorReportModal
-        open={reportModalOpen}
-        onClose={() => setReportModalOpen(false)}
-        organization={org}
-        branches={context.branches}
-        branchSummaryLabel={branchCurrent}
-        licenseBadgeLabel={licenseBadge}
-        performance={perf}
-        coordinatorName={coordinatorName}
-      />
     </main>
   );
 }
