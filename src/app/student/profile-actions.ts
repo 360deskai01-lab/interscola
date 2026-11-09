@@ -9,20 +9,8 @@ import type {
   UpdateStudentGoalsPayload,
 } from '@/lib/student-profile/types';
 import {
-  JOIN_CODE_PATTERN,
-  normalizeJoinCodeInput,
-} from '@/lib/b2b/join-code';
-import {
-  isOrganizationLicenseActive,
-  isStudentQuotaExceeded,
-  normalizeStudentQuota,
-  ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
-  ORG_JOIN_QUOTA_FULL_MESSAGE,
-} from '@/lib/b2b/license-quota';
-import {
   getStudentProfileDbClient,
   loadStudentGoalsContext,
-  loadStudentOrganization,
   parseInterestTags,
 } from '@/lib/student-profile/load-context';
 import { GUEST_LEAD_TARGET_SCORES_KEY } from '@/lib/guest-lead/constants';
@@ -217,156 +205,13 @@ export async function updateStudentGoalsAction(
 export async function joinOrganizationByCodeAction(
   joinCode: string,
 ): Promise<JoinOrganizationResult> {
-  try {
-    const student = await requireApprovedStudent();
-    if (!student) {
-      return {
-        success: false,
-        message: 'Bu işlem için onaylı öğrenci oturumu gerekir.',
-      };
-    }
-
-    const normalized = normalizeJoinCodeInput(joinCode);
-    if (!JOIN_CODE_PATTERN.test(normalized)) {
-      return {
-        success: false,
-        message:
-          'Katılım kodu 6 karakter olmalıdır (0/O ve 1/I kullanılmaz).',
-      };
-    }
-
-    const client = await getProfilesClient();
-    if (!client) {
-      return { success: false, message: 'Veritabanı bağlantısı kurulamadı.' };
-    }
-
-    const existingOrg = await loadStudentOrganization(client, student.userId);
-    if (existingOrg) {
-      return {
-        success: false,
-        message: `Zaten ${existingOrg.orgName} kurumuna bağlısın.`,
-        orgName: existingOrg.orgName,
-      };
-    }
-
-    const { data: orgRow, error: orgError } = await client
-      .from('organizations')
-      .select('id, name, is_active, join_code, student_quota, valid_until')
-      .eq('join_code', normalized)
-      .maybeSingle();
-
-    if (orgError) {
-      console.error('[student-profile] Kurum kodu araması:', orgError.message);
-      if (orgError.code === '42703') {
-        return {
-          success: false,
-          message:
-            'Kurum katılım kodu alanı henüz etkin değil. Yöneticinize başvurun.',
-        };
-      }
-      return { success: false, message: 'Kurum araması başarısız oldu.' };
-    }
-
-    if (!orgRow) {
-      return {
-        success: false,
-        message: ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
-      };
-    }
-
-    const org = orgRow as {
-      id: string;
-      name: string;
-      is_active: boolean | null;
-      student_quota: number | null;
-      valid_until: string | null;
-    };
-
-    if (
-      !isOrganizationLicenseActive(org.is_active, org.valid_until)
-    ) {
-      return {
-        success: false,
-        message: ORG_JOIN_LICENSE_INACTIVE_MESSAGE,
-      };
-    }
-
-    const studentQuota = normalizeStudentQuota(org.student_quota);
-
-    const { count: seatsUsed, error: countError } = await client
-      .from('organization_members')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', org.id)
-      .eq('org_role', 'student')
-      .eq('is_active', true);
-
-    if (countError) {
-      console.error('[student-profile] Kota sayımı:', countError.message);
-      return {
-        success: false,
-        message: 'Kurum kotası doğrulanamadı. Lütfen tekrar deneyin.',
-      };
-    }
-
-    const usedSeats = seatsUsed ?? 0;
-    if (isStudentQuotaExceeded(usedSeats, studentQuota)) {
-      return {
-        success: false,
-        message: ORG_JOIN_QUOTA_FULL_MESSAGE,
-      };
-    }
-
-    const { data: duplicate, error: dupError } = await client
-      .from('organization_members')
-      .select('id')
-      .eq('organization_id', org.id)
-      .eq('user_id', student.userId)
-      .maybeSingle();
-
-    if (dupError) {
-      console.error('[student-profile] Üyelik kontrolü:', dupError.message);
-    } else if (duplicate) {
-      return {
-        success: true,
-        message: `${org.name} kurumuna zaten kayıtlısın.`,
-        orgName: org.name,
-      };
-    }
-
-    const { error: insertError } = await client.from('organization_members').insert({
-      organization_id: org.id,
-      branch_id: null,
-      user_id: student.userId,
-      org_role: 'student',
-      is_active: true,
-    });
-
-    if (insertError) {
-      console.error('[student-profile] Kuruma katılım:', insertError.message);
-      if (insertError.code === '23505') {
-        return {
-          success: true,
-          message: `${org.name} kurumuna zaten kayıtlısın.`,
-          orgName: org.name,
-        };
-      }
-      return { success: false, message: 'Kuruma bağlanılamadı.' };
-    }
-
-    revalidatePath(STUDENT_DASHBOARD_PATH);
-    revalidatePath(STUDENT_CONNECTIONS_PATH);
-    return {
-      success: true,
-      message: `${org.name} kurumuna başarıyla bağlandın.`,
-      orgName: org.name,
-    };
-  } catch (error) {
-    console.error(
-      '[student-profile] joinOrganizationByCodeAction:',
-      error instanceof Error ? error.message : String(error),
-    );
-    return { success: false, message: 'Beklenmeyen bir hata oluştu.' };
-  }
+  const { joinOrganizationWithCodeAction } = await import(
+    '@/lib/b2b/join-organization-actions'
+  );
+  return joinOrganizationWithCodeAction({
+    joinCode,
+    memberRole: 'student',
+  });
 }
 
 // ---------------------------------------------------------------------------

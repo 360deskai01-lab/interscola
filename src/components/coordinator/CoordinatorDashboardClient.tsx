@@ -248,6 +248,9 @@ export function CoordinatorDashboardClient({
             <CoordinatorOrgSwitcher
               organizations={dashboard.adminOrganizationOptions}
               selectedOrganizationId={dashboard.selectedOrganizationId}
+              organizationName={org.name}
+              studentQuota={dashboard.license.studentQuota}
+              teacherQuota={dashboard.license.teacherQuota}
             />
           ) : null}
           {activeTab === 'overview' ? (

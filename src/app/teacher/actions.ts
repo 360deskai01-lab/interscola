@@ -136,6 +136,18 @@ function orgRoleLabel(role: string | null | undefined): string {
 /**
  * Onaylı öğretmenin aktif kurum üyeliğini döner (en güncel kayıt).
  */
+export async function joinTeacherOrganizationByCodeAction(
+  joinCode: string,
+): Promise<{ success: boolean; message: string; orgName?: string }> {
+  const { joinOrganizationWithCodeAction } = await import(
+    '@/lib/b2b/join-organization-actions'
+  );
+  return joinOrganizationWithCodeAction({
+    joinCode,
+    memberRole: 'teacher',
+  });
+}
+
 export async function getTeacherOrganizationContextAction(): Promise<{
   success: boolean;
   error?: string;

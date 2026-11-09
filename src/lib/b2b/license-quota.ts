@@ -1,6 +1,13 @@
 export const ORG_JOIN_QUOTA_FULL_MESSAGE =
   'Bu kurumun öğrenci lisans kotası dolmuştur. Lütfen okul koordinatörünüzle iletişime geçin.';
 
+export function orgJoinTeacherQuotaFullMessage(
+  used: number,
+  quota: number,
+): string {
+  return `Kurumun öğretmen lisans kapasitesi dolmuştur (${used}/${quota}). Lütfen kurum yöneticinizle iletişime geçin.`;
+}
+
 export const ORG_JOIN_LICENSE_INACTIVE_MESSAGE =
   'Geçersiz veya süresi dolmuş katılım kodu.';
 

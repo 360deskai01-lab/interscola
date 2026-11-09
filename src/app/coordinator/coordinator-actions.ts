@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/auth';
 import {
   getCoordinatorOrganizationContextAction,
@@ -15,6 +16,107 @@ import type {
   CoordinatorTeacherWorkloadRow,
 } from '@/app/coordinator/coordinator-dashboard-types';
 import { getStudentProfileDbClient } from '@/lib/student-profile/load-context';
+import { normalizeStudentQuota } from '@/lib/b2b/license-quota';
+import { normalizeTeacherQuota } from '@/lib/b2b/teacher-quota';
+
+const COORDINATOR_PATH = '/coordinator';
+
+export async function requirePlatformAdmin(): Promise<{ userId: string } | null> {
+  const current = await getCurrentProfile();
+  if (!current) return null;
+  if (current.profile.status !== 'approved') return null;
+  if (current.profile.role !== 'admin') return null;
+  return { userId: current.user.id };
+}
+
+export async function updateOrganizationQuotasAction(input: {
+  organizationId: string;
+  studentQuota: number | null;
+  teacherQuota: number | null;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  warning?: string;
+}> {
+  try {
+    const admin = await requirePlatformAdmin();
+    if (!admin) {
+      return {
+        success: false,
+        error: 'Kota düzenleme yalnızca platform yöneticisine açıktır.',
+      };
+    }
+
+    const orgId = input.organizationId.trim();
+    if (!STRICT_UUID_PATTERN.test(orgId)) {
+      return { success: false, error: 'Geçersiz kurum kimliği.' };
+    }
+
+    const studentQuota =
+      input.studentQuota === null
+        ? null
+        : normalizeStudentQuota(input.studentQuota);
+    const teacherQuota =
+      input.teacherQuota === null
+        ? null
+        : normalizeTeacherQuota(input.teacherQuota);
+
+    const client = await getStudentProfileDbClient();
+    if (!client) {
+      return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const payload: Record<string, unknown> = {
+      student_quota: studentQuota,
+      updated_at: new Date().toISOString(),
+    };
+    if (teacherQuota !== null) {
+      payload.teacher_quota = teacherQuota;
+    }
+
+    let { error: updateError } = await client
+      .from('organizations')
+      .update(payload)
+      .eq('id', orgId);
+
+    let warning: string | undefined;
+
+    if (updateError?.code === '42703') {
+      const { error: fallbackError } = await client
+        .from('organizations')
+        .update({
+          student_quota: studentQuota,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orgId);
+      if (fallbackError) {
+        console.error(
+          '[coordinator-actions] Kota güncelleme:',
+          fallbackError.message,
+        );
+        return { success: false, error: 'Kurum kotaları güncellenemedi.' };
+      }
+      warning =
+        'teacher_quota kolonu henüz yok; yalnızca öğrenci kotası kaydedildi.';
+    } else if (updateError) {
+      console.error(
+        '[coordinator-actions] Kota güncelleme:',
+        updateError.message,
+      );
+      return { success: false, error: 'Kurum kotaları güncellenemedi.' };
+    }
+
+    revalidatePath(COORDINATOR_PATH);
+    revalidatePath(COORDINATOR_PATH, 'layout');
+    return { success: true, warning };
+  } catch (error) {
+    console.error(
+      '[coordinator-actions] updateOrganizationQuotasAction:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { success: false, error: 'Beklenmeyen bir hata oluştu.' };
+  }
+}
 
 async function loadLinkedStudentsPerTeacher(
   client: NonNullable<Awaited<ReturnType<typeof getStudentProfileDbClient>>>,
