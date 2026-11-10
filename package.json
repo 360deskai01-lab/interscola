@@ -14,7 +14,8 @@
     "audit:hard:v4": "tsx scripts/audit-hard-v4.ts",
     "audit:hard:v5": "tsx scripts/audit-hard-v5.ts",
     "audit:hard:v6": "tsx scripts/audit-hard-v6.ts",
-    "audit:security": "tsx scripts/audit-security-redteam.ts"
+    "audit:security": "tsx scripts/audit-security-redteam.ts",
+    "audit:autonomous": "playwright test scripts/e2e-autonomous.spec.ts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",
@@ -34,6 +35,7 @@
     "unpdf": "^2.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

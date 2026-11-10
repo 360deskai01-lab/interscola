@@ -115,10 +115,16 @@ function parseRpcObserverRow(
 ): ObserverTokenDbRow | null {
   if (!raw || typeof raw !== 'object') return null;
   const row = raw as Record<string, unknown>;
+  const isActive =
+    typeof row.is_active === 'boolean'
+      ? row.is_active
+      : row.is_active === true ||
+        row.is_active === 'true' ||
+        row.is_active === 1 ||
+        row.is_active === 't';
   if (
     typeof row.id !== 'string' ||
     typeof row.token !== 'string' ||
-    typeof row.is_active !== 'boolean' ||
     typeof row.expires_at !== 'string' ||
     typeof row.created_at !== 'string'
   ) {
@@ -128,7 +134,7 @@ function parseRpcObserverRow(
     id: row.id,
     token: row.token,
     label: typeof row.label === 'string' ? row.label : null,
-    is_active: row.is_active,
+    is_active: isActive,
     expires_at: row.expires_at,
     last_accessed_at:
       typeof row.last_accessed_at === 'string' ? row.last_accessed_at : null,
@@ -290,6 +296,24 @@ export async function createObserverTokenAction(input?: {
           const mapped = mapTokenRow(dbRow);
           return finishCreateSuccess(token, mapped);
         }
+        const { data: refetchRow } = await sessionClient
+          .from('student_observer_tokens')
+          .select(
+            'id, token, label, is_active, expires_at, last_accessed_at, created_at',
+          )
+          .eq('student_id', student.userId)
+          .eq('token', token)
+          .maybeSingle();
+        if (refetchRow) {
+          return finishCreateSuccess(
+            token,
+            mapTokenRow(refetchRow as ObserverTokenDbRow),
+          );
+        }
+        return {
+          success: false,
+          error: 'Veli takip linki oluşturuldu ancak yanıt doğrulanamadı.',
+        };
       }
     }
 
