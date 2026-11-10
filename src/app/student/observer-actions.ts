@@ -6,6 +6,11 @@ import { getCurrentProfile } from '@/lib/auth';
 import { absoluteUrl } from '@/lib/seo/site-url';
 import { getSupabaseAdmin, PROFILES_SCHEMA } from '@/lib/supabase';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import {
+  MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
+  OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
+  shouldRejectObserverTokenCreation,
+} from '@/lib/observer/observer-token-limits';
 
 const TOKEN_TTL_DAYS = 90;
 const HEX_TOKEN_PATTERN = /^[a-f0-9]{32}$/i;
@@ -75,6 +80,7 @@ export async function createObserverTokenAction(input?: {
 }): Promise<{
   success: boolean;
   error?: string;
+  message?: string;
   token?: string;
   observeUrl?: string;
   row?: StudentObserverTokenRow;
@@ -91,6 +97,29 @@ export async function createObserverTokenAction(input?: {
     const client = await getStudentScopedClient();
     if (!client) {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
+    }
+
+    const nowIso = new Date().toISOString();
+    const { count: activeCount, error: countError } = await client
+      .from('student_observer_tokens')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', student.userId)
+      .eq('is_active', true)
+      .gt('expires_at', nowIso);
+
+    if (countError) {
+      console.error('[observer] aktif token sayımı:', countError.message);
+      if (!isMissingObserverTable(countError)) {
+        return { success: false, error: 'Bağlantı kotası kontrol edilemedi.' };
+      }
+    } else if (
+      shouldRejectObserverTokenCreation(activeCount ?? 0)
+    ) {
+      return {
+        success: false,
+        error: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
+        message: OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
+      };
     }
 
     const token = crypto.randomBytes(16).toString('hex');

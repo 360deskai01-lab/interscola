@@ -9,6 +9,11 @@ import {
   revokeObserverTokenAction,
   type StudentObserverTokenRow,
 } from '@/app/student/observer-actions';
+import {
+  countActiveStudentObserverTokens,
+  OBSERVER_MAX_ACTIVE_TOKENS,
+  shouldRejectObserverTokenCreation,
+} from '@/lib/observer/observer-token-limits';
 
 interface StudentObserverLinkPanelProps {
   initialTokens: StudentObserverTokenRow[];
@@ -40,7 +45,9 @@ export function StudentObserverLinkPanel({
         label: 'Veli / gözlemci',
       });
       if (!result.success) {
-        setError(result.error ?? 'Link oluşturulamadı.');
+        setError(
+          result.message ?? result.error ?? 'Link oluşturulamadı.',
+        );
         return;
       }
       const list = await listStudentObserverTokensAction();
@@ -83,7 +90,11 @@ export function StudentObserverLinkPanel({
     });
   }
 
-  const activeTokens = tokens.filter((t) => t.isActive);
+  const activeTokenCount = countActiveStudentObserverTokens(tokens);
+  const activeTokens = tokens.filter((t) =>
+    t.isActive && new Date(t.expiresAt).getTime() > Date.now(),
+  );
+  const atActiveLimit = shouldRejectObserverTokenCreation(activeTokenCount);
 
   return (
     <div className="rounded-2xl border border-indigo-400/25 bg-indigo-500/10 p-4">
@@ -104,12 +115,19 @@ export function StudentObserverLinkPanel({
         </p>
       ) : null}
 
+      {atActiveLimit ? (
+        <p className="mt-2 text-xs text-amber-200/90" role="status">
+          Maksimum {OBSERVER_MAX_ACTIVE_TOKENS} aktif bağlantı sınırına ulaşıldı.
+          Yeni link için mevcut bağlantılardan birini iptal edin.
+        </p>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={handleCreate}
-          disabled={pending}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-400/35 bg-indigo-500/25 px-4 py-2 text-xs font-semibold text-indigo-50 transition hover:bg-indigo-500/35 disabled:opacity-60"
+          disabled={pending || atActiveLimit}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-400/35 bg-indigo-500/25 px-4 py-2 text-xs font-semibold text-indigo-50 transition hover:bg-indigo-500/35 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {pending ? (
             <Loader2 className="size-3.5 animate-spin" aria-hidden />

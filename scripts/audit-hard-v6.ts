@@ -16,6 +16,12 @@ import {
 } from '../src/lib/b2b/weakness-ledger-topics';
 import { orgJoinTeacherQuotaFullMessage } from '../src/lib/b2b/license-quota';
 import { OBSERVER_INVALID_TOKEN_ERROR } from '../src/lib/observer/observer-dashboard-types';
+import {
+  countActiveStudentObserverTokens,
+  MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
+  OBSERVER_MAX_ACTIVE_TOKENS,
+  shouldRejectObserverTokenCreation,
+} from '../src/lib/observer/observer-token-limits';
 import { GUEST_DIAGNOSTIC_RESULT_KEY } from '../src/lib/guest-lead/constants';
 import {
   buildGuestDiagnosticClaimPayload,
@@ -345,6 +351,41 @@ function runGroup6ObserverTeacherContracts(): void {
   assert(
     'observer: randomBytes(16).toString(\'hex\')',
     observerActions.includes("randomBytes(16).toString('hex')"),
+  );
+
+  assert(
+    'observer: OBSERVER_MAX_ACTIVE_TOKENS = 5',
+    OBSERVER_MAX_ACTIVE_TOKENS === 5,
+  );
+
+  assert(
+    'observer: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI sabiti',
+    MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI ===
+      'MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI',
+  );
+
+  const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const mockFiveActive = Array.from({ length: 5 }, () => ({
+    isActive: true,
+    expiresAt: future,
+  }));
+  assert(
+    'observer: 5 aktif token → üretim reddi',
+    countActiveStudentObserverTokens(mockFiveActive) === 5 &&
+      shouldRejectObserverTokenCreation(5) === true,
+  );
+
+  const mockFourActive = mockFiveActive.slice(0, 4);
+  assert(
+    'observer: 4 aktif token → üretim izinli',
+    countActiveStudentObserverTokens(mockFourActive) === 4 &&
+      shouldRejectObserverTokenCreation(4) === false,
+  );
+
+  assert(
+    'observer: createObserverTokenAction limit kontrolü',
+    observerActions.includes('shouldRejectObserverTokenCreation') &&
+      observerActions.includes(MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI),
   );
 }
 
