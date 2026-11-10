@@ -46,6 +46,11 @@ async function getStudentScopedClient() {
   return await getSupabaseServer(PROFILES_SCHEMA);
 }
 
+/** Veli token üretimi: yalnızca çerezli SSR oturumu (RPC `auth.uid()` kalkanı). */
+async function getObserverSessionClient() {
+  return await getSupabaseServer(PROFILES_SCHEMA);
+}
+
 function mapTokenRow(row: {
   id: string;
   token: string;
@@ -154,7 +159,7 @@ function finishCreateSuccess(
 
 /** RPC yoksa veya hata verirse: manuel sayım + insert (TOCTOU riski bilinçli fallback). */
 async function createObserverTokenFallback(
-  client: NonNullable<Awaited<ReturnType<typeof getStudentScopedClient>>>,
+  client: NonNullable<Awaited<ReturnType<typeof getObserverSessionClient>>>,
   studentId: string,
   token: string,
   label: string | null,
@@ -240,8 +245,8 @@ export async function createObserverTokenAction(input?: {
       };
     }
 
-    const client = await getStudentScopedClient();
-    if (!client) {
+    const sessionClient = await getObserverSessionClient();
+    if (!sessionClient) {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
@@ -254,7 +259,7 @@ export async function createObserverTokenAction(input?: {
       ? input.label.trim().slice(0, 80)
       : 'Veli / Gözlemci';
 
-    const rpc = await client.rpc('create_student_observer_token_atomic', {
+    const rpc = await sessionClient.rpc('create_student_observer_token_atomic', {
       p_student_id: student.userId,
       p_token: token,
       p_label: label,
@@ -272,7 +277,12 @@ export async function createObserverTokenAction(input?: {
               payload.message?.trim() || OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
           };
         }
-        // Diğer RPC iş kuralı hataları (örn. UNAUTHORIZED service-role) → fallback
+        if (payload.error === 'UNAUTHORIZED') {
+          return {
+            success: false,
+            error: 'Bu işlem için geçerli öğrenci oturumu gerekir.',
+          };
+        }
       }
       if (payload.success === true) {
         const dbRow = parseRpcObserverRow(payload.row);
@@ -283,15 +293,29 @@ export async function createObserverTokenAction(input?: {
       }
     }
 
-    if (rpc.error && !isObserverRpcUnavailable(rpc.error)) {
+    if (rpc.error && isObserverRpcUnavailable(rpc.error)) {
       console.warn(
-        '[observer] atomik RPC başarısız, fallback deneniyor:',
+        '[observer] atomik RPC kullanılamıyor, oturumlu fallback:',
         rpc.error.message,
+      );
+      return createObserverTokenFallback(
+        sessionClient,
+        student.userId,
+        token,
+        label === 'Veli / Gözlemci' ? null : label,
       );
     }
 
+    if (rpc.error) {
+      console.error('[observer] atomik RPC:', rpc.error.message);
+      return {
+        success: false,
+        error: 'Veli takip linki oluşturulamadı.',
+      };
+    }
+
     return createObserverTokenFallback(
-      client,
+      sessionClient,
       student.userId,
       token,
       label === 'Veli / Gözlemci' ? null : label,
