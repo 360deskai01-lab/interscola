@@ -1,14 +1,9 @@
 import type { AssessmentPayload, EvaluationResult } from '@/types/exam';
+import { buildCaieMetricBreakdown, normalizeCaieBreakdown } from '@/lib/exam/caie-rubric';
 
 const SAT_MAX_SCORE = 1600;
 const IELTS_MIN_BAND = 1;
 const IELTS_MAX_BAND = 9;
-
-const AO_LABELS = {
-  ao1_knowledge: 'AO1',
-  ao2_application: 'AO2',
-  ao3_evaluation: 'AO3',
-} as const;
 
 const IELTS_LABELS = {
   ielts_task_achievement: 'Task Achievement',
@@ -59,19 +54,17 @@ export function evaluationForUnansweredExam(
     const mcqCount = exam.questions.filter(
       (question) => question.type === 'multiple_choice',
     ).length;
+    const caieEmpty = normalizeCaieBreakdown(0, 0, 0, exam.totalMarks);
     return {
       score: 0,
       maxScore: exam.totalMarks,
       scaledResult: 'Grade U',
-      metricBreakdown: {
-        [AO_LABELS.ao1_knowledge]: 0,
-        [AO_LABELS.ao2_application]: 0,
-        [AO_LABELS.ao3_evaluation]: 0,
-        yuzde: 0,
-        ...(mcqCount > 0
+      metricBreakdown: buildCaieMetricBreakdown(
+        { ...caieEmpty, cambridge_grade: 'U' },
+        mcqCount > 0
           ? { mcqDogru: 0, mcqYanlis: 0, mcqBos: mcqCount }
-          : {}),
-      },
+          : undefined,
+      ),
       feedback,
       remedialTopics,
     };

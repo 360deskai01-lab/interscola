@@ -22,6 +22,11 @@ import {
   OBSERVER_MAX_ACTIVE_TOKENS,
   shouldRejectObserverTokenCreation,
 } from '../src/lib/observer/observer-token-limits';
+import {
+  calculateCaieGrade,
+  normalizeCaieBreakdown,
+  validateCaieQuestionRubric,
+} from '../src/lib/exam/caie-rubric';
 import { GUEST_DIAGNOSTIC_RESULT_KEY } from '../src/lib/guest-lead/constants';
 import {
   buildGuestDiagnosticClaimPayload,
@@ -389,6 +394,51 @@ function runGroup6ObserverTeacherContracts(): void {
   );
 }
 
+function runGroup7CaieRubric(): void {
+  console.log(
+    '\n=== Grup 7: CAIE A-LEVEL / AS-LEVEL RUBRİK VE NOTLANDIRMA SÖZLEŞMESİ ===',
+  );
+
+  assert(
+    'caie-grade: %90 A*, %80 A, %70 B, %40 E, %39 U',
+    calculateCaieGrade(90, 100) === 'A*' &&
+      calculateCaieGrade(80, 100) === 'A' &&
+      calculateCaieGrade(70, 100) === 'B' &&
+      calculateCaieGrade(40, 100) === 'E' &&
+      calculateCaieGrade(39, 100) === 'U',
+  );
+
+  const breakdown = normalizeCaieBreakdown(10, 4, 2, 20);
+  assert(
+    'caie-breakdown: toplam ve cambridge_grade bütünlüğü',
+    breakdown.totalScore === 16 &&
+      breakdown.maxMarks === 20 &&
+      breakdown.cambridge_grade === 'A' &&
+      breakdown.percent === 80,
+  );
+
+  assert(
+    'caie-breakdown: AO yüzde dağılımı toplamı ~100',
+    Math.abs(
+      breakdown.ao1Percent + breakdown.ao2Percent + breakdown.ao3Percent - 100,
+    ) < 0.01,
+  );
+
+  assert(
+    'caie-rubric: validate — en az bir AO kriteri (pozitif)',
+    validateCaieQuestionRubric({
+      ao2_application: 'Apply theories to the scenario.',
+    }),
+  );
+
+  assert(
+    'caie-rubric: validate — boş rubrik reddi',
+    !validateCaieQuestionRubric({}) &&
+      !validateCaieQuestionRubric(null) &&
+      !validateCaieQuestionRubric({ ao1_knowledge: '   ' }),
+  );
+}
+
 function main(): void {
   console.log('Interscola Hard Audit Harness 6.0\n');
   runGroup1TeacherQuota();
@@ -397,6 +447,7 @@ function main(): void {
   runGroup4InstitutionalA4();
   runGroup5WeaknessLedger();
   runGroup6ObserverTeacherContracts();
+  runGroup7CaieRubric();
 
   console.log('\n--- Özet ---');
   console.log(`Toplam assertion: ${passed + failed}`);

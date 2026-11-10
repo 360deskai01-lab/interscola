@@ -8,6 +8,12 @@ import {
 } from '@/lib/supabase';
 import { getSessionUser } from '@/lib/auth';
 import { evaluationForUnansweredExam } from '@/lib/exam/unanswered-exam-evaluation';
+import {
+  buildCaieMetricBreakdown,
+  calculateCaieGrade,
+  formatCaieScaledResult,
+  normalizeCaieBreakdown,
+} from '@/lib/exam/caie-rubric';
 import type {
   AssessmentPayload,
   CurriculumCode,
@@ -46,21 +52,6 @@ const SAT_SCORE_STEP = 10;
 const IELTS_MIN_BAND = 1;
 const IELTS_MAX_BAND = 9;
 const IELTS_HALF_STEP = 0.5;
-
-/**
- * CAIE yüzdelik not sınırları. Gerçek sınırlar her sınav oturumunda ve her
- * bileşende ayrı ayrı açıklanır; bu tablo genel bir yaklaşımdır ve
- * değiştirilebilir olması için tek yerde tutulur.
- */
-const CAIE_GRADE_BOUNDARIES: readonly { grade: string; minPercent: number }[] = [
-  { grade: 'A*', minPercent: 90 },
-  { grade: 'A', minPercent: 80 },
-  { grade: 'B', minPercent: 70 },
-  { grade: 'C', minPercent: 60 },
-  { grade: 'D', minPercent: 50 },
-  { grade: 'E', minPercent: 40 },
-  { grade: 'U', minPercent: 0 },
-];
 
 const AO_KEYS = ['ao1_knowledge', 'ao2_application', 'ao3_evaluation'] as const;
 
@@ -1057,13 +1048,6 @@ The three AO marks for a question SHOULD sum to approximately its targetMarks
 (AO1 normally carries the largest share, AO3 the smallest for extended-response questions).
 Be strict: a descriptive answer that never evaluates must score near zero on AO3.`;
 
-function caieGradeFromPercent(percent: number): string {
-  const boundary = CAIE_GRADE_BOUNDARIES.find(
-    (entry) => percent >= entry.minPercent,
-  );
-  return boundary?.grade ?? 'U';
-}
-
 async function gradeRubricEssay(
   ai: GoogleGenAI,
   exam: AssessmentPayload,
@@ -1159,29 +1143,36 @@ async function gradeRubricEssay(
 
   const combinedRaw = mcqResult.score + openResponseScore;
   const score = roundTo2(Math.min(combinedRaw, exam.totalMarks));
-  const percent = (score / exam.totalMarks) * 100;
-  const grade = caieGradeFromPercent(percent);
+  const percent =
+    exam.totalMarks > 0 ? roundTo2((score / exam.totalMarks) * 100) : 0;
+  const grade = calculateCaieGrade(score, exam.totalMarks);
+
+  const aoBreakdown = normalizeCaieBreakdown(
+    totals.ao1_knowledge,
+    totals.ao2_application,
+    totals.ao3_evaluation,
+    exam.totalMarks,
+  );
 
   const capNote =
     cappedQuestions > 0
       ? ` (${cappedQuestions} açık uçlu soruda modelin AO puanları soru puanını aştığı için üst sınıra çekildi.)`
       : '';
 
-  const metricBreakdown: Record<string, number> = {
-    [AO_LABELS.ao1_knowledge]: roundTo2(totals.ao1_knowledge),
-    [AO_LABELS.ao2_application]: roundTo2(totals.ao2_application),
-    [AO_LABELS.ao3_evaluation]: roundTo2(totals.ao3_evaluation),
-    yuzde: roundTo2(percent),
-  };
-
-  if (mcqQuestions.length > 0) {
-    Object.assign(metricBreakdown, mcqResult.metricBreakdown);
-  }
+  const metricBreakdown = buildCaieMetricBreakdown(
+    {
+      ...aoBreakdown,
+      totalScore: score,
+      percent,
+      cambridge_grade: grade,
+    },
+    mcqQuestions.length > 0 ? mcqResult.metricBreakdown : undefined,
+  );
 
   return {
     score,
     maxScore: exam.totalMarks,
-    scaledResult: `Grade ${grade}`,
+    scaledResult: formatCaieScaledResult(grade, percent),
     metricBreakdown,
     feedback:
       `${feedbackParts.join(' ')} Toplam ${score}/${exam.totalMarks} puan ` +
