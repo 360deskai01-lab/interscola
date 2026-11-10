@@ -75,6 +75,152 @@ function isMissingObserverTable(error: { code?: string; message?: string }): boo
   );
 }
 
+function isObserverRpcUnavailable(error: {
+  code?: string;
+  message?: string;
+} | null): boolean {
+  if (!error) return false;
+  const haystack = `${error.code ?? ''} ${error.message ?? ''}`.toLowerCase();
+  return (
+    error.code === '42883' ||
+    error.code === 'PGRST202' ||
+    haystack.includes('create_student_observer_token_atomic')
+  );
+}
+
+type ObserverTokenDbRow = {
+  id: string;
+  token: string;
+  label: string | null;
+  is_active: boolean;
+  expires_at: string;
+  last_accessed_at: string | null;
+  created_at: string;
+};
+
+type CreateObserverTokenRpcPayload = {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  row?: ObserverTokenDbRow;
+};
+
+function parseRpcObserverRow(
+  raw: unknown,
+): ObserverTokenDbRow | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw as Record<string, unknown>;
+  if (
+    typeof row.id !== 'string' ||
+    typeof row.token !== 'string' ||
+    typeof row.is_active !== 'boolean' ||
+    typeof row.expires_at !== 'string' ||
+    typeof row.created_at !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    id: row.id,
+    token: row.token,
+    label: typeof row.label === 'string' ? row.label : null,
+    is_active: row.is_active,
+    expires_at: row.expires_at,
+    last_accessed_at:
+      typeof row.last_accessed_at === 'string' ? row.last_accessed_at : null,
+    created_at: row.created_at,
+  };
+}
+
+function finishCreateSuccess(
+  token: string,
+  row: StudentObserverTokenRow,
+): {
+  success: true;
+  token: string;
+  observeUrl: string;
+  row: StudentObserverTokenRow;
+} {
+  for (const path of STUDENT_PATHS) {
+    revalidatePath(path);
+  }
+  revalidatePath(`/observe/${token}`);
+  return {
+    success: true,
+    token,
+    observeUrl: row.observeUrl,
+    row,
+  };
+}
+
+/** RPC yoksa veya hata verirse: manuel sayım + insert (TOCTOU riski bilinçli fallback). */
+async function createObserverTokenFallback(
+  client: NonNullable<Awaited<ReturnType<typeof getStudentScopedClient>>>,
+  studentId: string,
+  token: string,
+  label: string | null,
+): Promise<{
+  success: boolean;
+  error?: string;
+  message?: string;
+  token?: string;
+  observeUrl?: string;
+  row?: StudentObserverTokenRow;
+}> {
+  const nowIso = new Date().toISOString();
+  const { count: activeCount, error: countError } = await client
+    .from('student_observer_tokens')
+    .select('id', { count: 'exact', head: true })
+    .eq('student_id', studentId)
+    .eq('is_active', true)
+    .gt('expires_at', nowIso);
+
+  if (countError) {
+    console.error('[observer] aktif token sayımı (fallback):', countError.message);
+    if (!isMissingObserverTable(countError)) {
+      return { success: false, error: 'Bağlantı kotası kontrol edilemedi.' };
+    }
+  } else if (shouldRejectObserverTokenCreation(activeCount ?? 0)) {
+    return {
+      success: false,
+      error: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
+      message: OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
+    };
+  }
+
+  const expiresAt = new Date(
+    Date.now() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const { data, error } = await client
+    .from('student_observer_tokens')
+    .insert({
+      student_id: studentId,
+      token,
+      label,
+      expires_at: expiresAt,
+      is_active: true,
+    })
+    .select(
+      'id, token, label, is_active, expires_at, last_accessed_at, created_at',
+    )
+    .single();
+
+  if (error) {
+    console.error('[observer] token oluşturma (fallback):', error.message);
+    if (isMissingObserverTable(error)) {
+      return {
+        success: false,
+        error:
+          'Veli bağlantı tablosu henüz kurulmadı. Yöneticinize başvurun.',
+      };
+    }
+    return { success: false, error: 'Veli takip linki oluşturulamadı.' };
+  }
+
+  const row = mapTokenRow(data as ObserverTokenDbRow);
+  return finishCreateSuccess(token, row);
+}
+
 export async function createObserverTokenAction(input?: {
   label?: string;
 }): Promise<{
@@ -99,88 +245,57 @@ export async function createObserverTokenAction(input?: {
       return { success: false, error: 'Veritabanı bağlantısı kurulamadı.' };
     }
 
-    const nowIso = new Date().toISOString();
-    const { count: activeCount, error: countError } = await client
-      .from('student_observer_tokens')
-      .select('id', { count: 'exact', head: true })
-      .eq('student_id', student.userId)
-      .eq('is_active', true)
-      .gt('expires_at', nowIso);
-
-    if (countError) {
-      console.error('[observer] aktif token sayımı:', countError.message);
-      if (!isMissingObserverTable(countError)) {
-        return { success: false, error: 'Bağlantı kotası kontrol edilemedi.' };
-      }
-    } else if (
-      shouldRejectObserverTokenCreation(activeCount ?? 0)
-    ) {
-      return {
-        success: false,
-        error: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
-        message: OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
-      };
-    }
-
     const token = crypto.randomBytes(16).toString('hex');
     if (!HEX_TOKEN_PATTERN.test(token)) {
       return { success: false, error: 'Token üretilemedi.' };
     }
 
-    const expiresAt = new Date(
-      Date.now() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
-    ).toISOString();
-    const label = input?.label?.trim() ? input.label.trim().slice(0, 80) : null;
+    const label = input?.label?.trim()
+      ? input.label.trim().slice(0, 80)
+      : 'Veli / Gözlemci';
 
-    const { data, error } = await client
-      .from('student_observer_tokens')
-      .insert({
-        student_id: student.userId,
-        token,
-        label,
-        expires_at: expiresAt,
-        is_active: true,
-      })
-      .select(
-        'id, token, label, is_active, expires_at, last_accessed_at, created_at',
-      )
-      .single();
+    const rpc = await client.rpc('create_student_observer_token_atomic', {
+      p_student_id: student.userId,
+      p_token: token,
+      p_label: label,
+      p_expires_in_days: TOKEN_TTL_DAYS,
+    });
 
-    if (error) {
-      console.error('[observer] token oluşturma:', error.message);
-      if (isMissingObserverTable(error)) {
-        return {
-          success: false,
-          error:
-            'Veli bağlantı tablosu henüz kurulmadı. Yöneticinize başvurun.',
-        };
+    if (!rpc.error && rpc.data && typeof rpc.data === 'object') {
+      const payload = rpc.data as CreateObserverTokenRpcPayload;
+      if (payload.success === false) {
+        if (payload.error === MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI) {
+          return {
+            success: false,
+            error: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI,
+            message:
+              payload.message?.trim() || OBSERVER_MAX_ACTIVE_TOKEN_USER_MESSAGE,
+          };
+        }
+        // Diğer RPC iş kuralı hataları (örn. UNAUTHORIZED service-role) → fallback
       }
-      return { success: false, error: 'Veli takip linki oluşturulamadı.' };
+      if (payload.success === true) {
+        const dbRow = parseRpcObserverRow(payload.row);
+        if (dbRow) {
+          const mapped = mapTokenRow(dbRow);
+          return finishCreateSuccess(token, mapped);
+        }
+      }
     }
 
-    const row = mapTokenRow(
-      data as {
-        id: string;
-        token: string;
-        label: string | null;
-        is_active: boolean;
-        expires_at: string;
-        last_accessed_at: string | null;
-        created_at: string;
-      },
-    );
-
-    for (const path of STUDENT_PATHS) {
-      revalidatePath(path);
+    if (rpc.error && !isObserverRpcUnavailable(rpc.error)) {
+      console.warn(
+        '[observer] atomik RPC başarısız, fallback deneniyor:',
+        rpc.error.message,
+      );
     }
-    revalidatePath(`/observe/${token}`);
 
-    return {
-      success: true,
+    return createObserverTokenFallback(
+      client,
+      student.userId,
       token,
-      observeUrl: row.observeUrl,
-      row,
-    };
+      label === 'Veli / Gözlemci' ? null : label,
+    );
   } catch (error) {
     console.error(
       '[observer] createObserverTokenAction:',

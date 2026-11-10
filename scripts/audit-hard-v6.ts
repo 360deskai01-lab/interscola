@@ -393,6 +393,46 @@ function runGroup6ObserverTeacherContracts(): void {
     observerActions.includes('shouldRejectObserverTokenCreation') &&
       observerActions.includes(MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI),
   );
+
+  const atomicMigration = readSrc(
+    'supabase/migrations/20261110120000_create_student_observer_token_atomic.sql',
+  );
+  assert(
+    'observer-rpc: create_student_observer_token_atomic tanımı',
+    atomicMigration.includes(
+      'CREATE OR REPLACE FUNCTION public.create_student_observer_token_atomic',
+    ) &&
+      atomicMigration.includes('p_student_id uuid') &&
+      atomicMigration.includes('p_expires_in_days int'),
+  );
+
+  assert(
+    'observer-rpc: MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI RPC yanıtı',
+    atomicMigration.includes("'MAKSIMUM_AKTIF_TOKEN_LIMITI_ASILDI'") &&
+      observerActions.includes(
+        "rpc('create_student_observer_token_atomic'",
+      ) &&
+      observerActions.includes('p_expires_in_days: TOKEN_TTL_DAYS'),
+  );
+
+  assert(
+    'observer-rpc: 90 gün TTL ve 32 hex koruması',
+    observerActions.includes('TOKEN_TTL_DAYS = 90') &&
+      observerActions.includes("randomBytes(16).toString('hex')") &&
+      atomicMigration.includes("p_token !~ '^[a-f0-9]{32}$'"),
+  );
+
+  assert(
+    'observer-rpc: atomik fallback mekanizması kaynakta',
+    observerActions.includes('createObserverTokenFallback') &&
+      observerActions.includes('isObserverRpcUnavailable'),
+  );
+
+  assert(
+    'observer-rpc: advisory lock TOCTOU kalkanı',
+    atomicMigration.includes('pg_advisory_xact_lock') &&
+      atomicMigration.includes('v_max_active constant int := 5'),
+  );
 }
 
 function runGroup7CaieRubric(): void {
