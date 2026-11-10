@@ -9,6 +9,11 @@ import {
 import { ATTEMPTS_TABLE, getSupabaseAdmin } from '@/lib/supabase';
 import { formatSupabaseError } from '@/lib/universities/supabase-error';
 import {
+  aggregateCoordinatorA4CaieAo,
+  parseCaieMetricBreakdownSlice,
+  type CoordinatorA4CaieAoSummary,
+} from '@/lib/b2b/coordinator-a4-caie-ao';
+import {
   extractWeaknessTopicsFromEvaluation,
   topWeaknessTopics,
   type WeaknessTopicCount,
@@ -124,6 +129,7 @@ export type CoordinatorSchoolReportAnalytics = {
   caieSuccessPercent: number | null;
   completionRatePercent: number | null;
   criticalWeaknesses: WeaknessTopicCount[];
+  caieAo: CoordinatorA4CaieAoSummary;
 };
 
 export async function buildCoordinatorSchoolReportAnalytics(
@@ -142,6 +148,7 @@ export async function buildCoordinatorSchoolReportAnalytics(
       caieSuccessPercent: null,
       completionRatePercent: null,
       criticalWeaknesses: [],
+      caieAo: aggregateCoordinatorA4CaieAo([]),
     };
   }
 
@@ -154,6 +161,7 @@ export async function buildCoordinatorSchoolReportAnalytics(
   const studentsWithAttempt = new Set<string>();
   const topicCounts = new Map<string, number>();
   const caiePercents: number[] = [];
+  const caieAoSlices: ReturnType<typeof parseCaieMetricBreakdownSlice>[] = [];
 
   for (const row of rawRows) {
     const studentId =
@@ -170,6 +178,8 @@ export async function buildCoordinatorSchoolReportAnalytics(
     if (curriculum === 'CAIE') {
       const pct = caiePercentFromAttempt(row);
       if (pct !== null) caiePercents.push(pct);
+      const slice = parseCaieMetricBreakdownSlice(row.metric_breakdown);
+      if (slice) caieAoSlices.push(slice);
     }
 
     for (const topic of extractWeaknessTopicsFromEvaluation(row.evaluations)) {
@@ -196,6 +206,9 @@ export async function buildCoordinatorSchoolReportAnalytics(
     caieSuccessPercent,
     completionRatePercent,
     criticalWeaknesses: topWeaknessTopics(topicCounts, 3),
+    caieAo: aggregateCoordinatorA4CaieAo(
+      caieAoSlices.filter((s): s is NonNullable<typeof s> => s !== null),
+    ),
   };
 }
 

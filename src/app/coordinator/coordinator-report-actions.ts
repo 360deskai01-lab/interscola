@@ -114,6 +114,7 @@ export async function getCoordinatorSchoolReportDataAction(input?: {
       faculty,
       criticalWeaknesses: analytics.criticalWeaknesses,
       branchCount: context.branches.length,
+      caieAo: analytics.caieAo,
     };
 
     return { success: true, data };

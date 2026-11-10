@@ -137,6 +137,55 @@ export function CoordinatorSchoolA4Report({
         />
       </section>
 
+      {report.caieAo.showBlock ? (
+        <section className="border-b border-slate-200 px-8 py-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Cambridge Assessment Objectives (AO) Dağılımı
+            </h2>
+            <p className="text-base font-bold text-indigo-950">
+              {report.caieAo.cambridgeGradeHeadline}
+            </p>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            CAIE / A-Level resmi denemeleri ({report.caieAo.attemptCount} kayıt
+            · kurum ortalaması)
+          </p>
+          <table className="mt-4 w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                <th className="py-2 pr-3 font-semibold">Hedef</th>
+                <th className="py-2 pr-3 text-right font-semibold">Ort. puan</th>
+                <th className="py-2 text-right font-semibold">Ort. %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.caieAo.rows.map((row) => (
+                <tr key={row.key} className="border-b border-slate-100">
+                  <td className="py-2.5 pr-3 text-slate-800">
+                    <span className="font-semibold">
+                      AO
+                      {row.key === 'ao1_knowledge'
+                        ? '1'
+                        : row.key === 'ao2_application'
+                          ? '2'
+                          : '3'}
+                    </span>
+                    <span className="text-slate-600"> — {row.label}</span>
+                  </td>
+                  <td className="py-2.5 pr-3 text-right tabular-nums font-semibold text-slate-900">
+                    {row.pointsDisplay}
+                  </td>
+                  <td className="py-2.5 text-right tabular-nums text-slate-700">
+                    {row.percentDisplay}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
       <section className="px-8 py-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Zümre & öğretmen performansı

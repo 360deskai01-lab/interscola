@@ -23,6 +23,13 @@ import {
   shouldRejectObserverTokenCreation,
 } from '../src/lib/observer/observer-token-limits';
 import {
+  aggregateCoordinatorA4CaieAo,
+  buildSafeCaieAoDisplayRows,
+  parseCaieMetricBreakdownSlice,
+  resolveCambridgeGradeHeadline,
+} from '../src/lib/b2b/coordinator-a4-caie-ao';
+import {
+  buildCaieMetricBreakdown,
   calculateCaieGrade,
   ensureValidCaieQuestionRubric,
   normalizeCaieBreakdown,
@@ -523,6 +530,59 @@ function runGroup7CaieRubric(): void {
   );
 }
 
+function runGroup8A4CaieAo(): void {
+  console.log(
+    '\n=== Grup 8: A4 KURUMSAL KARNE CAIE AO METRİK ENTEGRASYONU ===',
+  );
+
+  const breakdown = normalizeCaieBreakdown(12, 8, 6, 30);
+  const metricBreakdown = buildCaieMetricBreakdown(breakdown, {
+    mcqDogru: 1,
+  });
+
+  const slice = parseCaieMetricBreakdownSlice(metricBreakdown);
+  assert(
+    'a4-caie: mock metricBreakdown → AO dilimi tam',
+    slice !== null &&
+      slice.ao1_knowledge === breakdown.ao1_knowledge &&
+      slice.ao2_application === breakdown.ao2_application &&
+      slice.ao3_evaluation === breakdown.ao3_evaluation &&
+      slice.cambridge_grade === breakdown.cambridge_grade,
+  );
+
+  const aggregated = aggregateCoordinatorA4CaieAo(slice ? [slice] : []);
+  assert(
+    'a4-caie: kurumsal agregasyon showBlock ve satır sayısı',
+    aggregated.showBlock &&
+      aggregated.rows.length === 3 &&
+      aggregated.cambridgeGradeHeadline.includes('Grade'),
+  );
+
+  const safeEmpty = buildSafeCaieAoDisplayRows(null);
+  assert(
+    'a4-caie: boş AO → güvenli — gösterimi',
+    safeEmpty.length === 3 &&
+      safeEmpty.every(
+        (row) => row.pointsDisplay === '—' && row.percentDisplay === '—',
+      ),
+  );
+
+  const headline = resolveCambridgeGradeHeadline(metricBreakdown);
+  assert(
+    'a4-caie: Cambridge resmi başlık mührü',
+    headline.includes('Grade A') && headline.includes('%'),
+  );
+
+  const a4 = readSrc('src/components/coordinator/CoordinatorSchoolA4Report.tsx');
+  const aoPanel = readSrc('src/components/exam/CaieAoBreakdownPanel.tsx');
+  assert(
+    'a4-caie: A4 + sınav sonuç AO şablonları',
+    a4.includes('Cambridge Assessment Objectives (AO) Dağılımı') &&
+      a4.includes('report.caieAo') &&
+      aoPanel.includes('buildSafeCaieAoDisplayRows'),
+  );
+}
+
 function main(): void {
   console.log('Interscola Hard Audit Harness 6.0\n');
   runGroup1TeacherQuota();
@@ -532,6 +592,7 @@ function main(): void {
   runGroup5WeaknessLedger();
   runGroup6ObserverTeacherContracts();
   runGroup7CaieRubric();
+  runGroup8A4CaieAo();
 
   console.log('\n--- Özet ---');
   console.log(`Toplam assertion: ${passed + failed}`);

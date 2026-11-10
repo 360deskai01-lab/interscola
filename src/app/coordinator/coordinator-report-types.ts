@@ -1,3 +1,4 @@
+import type { CoordinatorA4CaieAoSummary } from '@/lib/b2b/coordinator-a4-caie-ao';
 import type { WeaknessTopicCount } from '@/lib/b2b/weakness-ledger-topics';
 
 export type CoordinatorSchoolReportFacultyRow = {
@@ -36,4 +37,6 @@ export type CoordinatorSchoolReportData = {
   faculty: CoordinatorSchoolReportFacultyRow[];
   criticalWeaknesses: WeaknessTopicCount[];
   branchCount: number;
+  /** Cambridge A-Level / CAIE kurumsal AO özeti (deneme yoksa showBlock: false). */
+  caieAo: CoordinatorA4CaieAoSummary;
 };

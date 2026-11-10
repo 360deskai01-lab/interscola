@@ -26,7 +26,18 @@ import {
   ExamResultTransparencyFootnote,
 } from '@/components/exam/ExamResultCard';
 import { inferSessionFormat, sessionFormatUiLabel } from '@/lib/exam/exam-session-formats';
+import { CaieAoBreakdownPanel } from '@/components/exam/CaieAoBreakdownPanel';
 import { GlassCard, fireConfetti, useCountUp } from './ui';
+
+const CAIE_AO_METRIC_KEYS = new Set([
+  'ao1_knowledge',
+  'ao2_application',
+  'ao3_evaluation',
+  'ao1Percent',
+  'ao2Percent',
+  'ao3Percent',
+  'cambridge_grade',
+]);
 
 interface ExamResultsProps {
   exam: AssessmentPayload;
@@ -68,7 +79,11 @@ export function ExamResults({
     finishedFast,
   );
 
-  const breakdownEntries = Object.entries(evaluation.metricBreakdown);
+  const isCaieSession =
+    exam.curriculum === 'CAIE' && exam.engineType === 'RUBRIC_ESSAY';
+  const breakdownEntries = Object.entries(evaluation.metricBreakdown).filter(
+    ([key]) => !isCaieSession || !CAIE_AO_METRIC_KEYS.has(key),
+  );
   const sessionFormat = inferSessionFormat(exam);
 
   /*
@@ -193,6 +208,12 @@ export function ExamResults({
           ))}
         </div>
       </div>
+
+      {isCaieSession ? (
+        <div className="mt-6">
+          <CaieAoBreakdownPanel metricBreakdown={evaluation.metricBreakdown} />
+        </div>
+      ) : null}
 
       {/* Kırılım */}
       {breakdownEntries.length > 0 ? (
