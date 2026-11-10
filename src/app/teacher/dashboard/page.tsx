@@ -42,6 +42,7 @@ import {
   getTeacherAssignmentReviewDetailByIdFormAction,
   getTeacherAssignmentStudentPoolAction,
 } from '@/lib/b2b/teacher-assignment-actions';
+import { buildTeacherClassCaieAoSummary } from '@/lib/b2b/teacher-class-caie-ao';
 
 export const instant = false;
 
@@ -146,6 +147,10 @@ export default async function TeacherDashboardPage({
         progressResult.error ??
         'Panel verisi yüklenemedi.');
 
+  const classCaieAo = await buildTeacherClassCaieAoSummary(
+    students.map((s) => s.studentId),
+  );
+
   return (
     <div className="min-h-dvh bg-slate-950 text-slate-100">
       <div
@@ -228,6 +233,8 @@ export default async function TeacherDashboardPage({
           }}
           panelDataError={panelDataError}
           nearestOfficialExam={examRadar.nearestExam}
+          classCaieAo={classCaieAo}
+          classBranchLabel={orgContext?.branchName ?? null}
         />
 
         <p className="mt-8 text-center text-xs text-slate-600">

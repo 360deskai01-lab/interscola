@@ -67,6 +67,8 @@ import type {
 } from '@/lib/b2b/teacher-assignment-actions';
 import type { TeacherAssignmentReviewDetail } from '@/lib/b2b/teacher-assignment-review-types';
 import type { TeacherAssignSubmitResult } from '@/components/teacher/TeacherAssignFromLibraryModal';
+import type { CoordinatorA4CaieAoSummary } from '@/lib/b2b/coordinator-a4-caie-ao';
+import { TeacherClassCaieAoChip } from '@/components/teacher/TeacherClassCaieAoChip';
 
 interface TeacherPanelProps {
   activeTab: TeacherDashboardTab;
@@ -184,6 +186,8 @@ interface TeacherPanelProps {
   };
   panelDataError: string | null;
   nearestOfficialExam: OfficialExamScheduleSummary | null;
+  classCaieAo: CoordinatorA4CaieAoSummary;
+  classBranchLabel: string | null;
 }
 
 const CURRICULUM_LABELS: Record<string, string> = {
@@ -273,6 +277,8 @@ export function TeacherPanel({
   stats,
   panelDataError,
   nearestOfficialExam,
+  classCaieAo,
+  classBranchLabel,
 }: TeacherPanelProps): ReactNode {
   const router = useRouter();
   const [studentMessageTarget, setStudentMessageTarget] =
@@ -358,6 +364,11 @@ export function TeacherPanel({
               onJoinOrganization={onJoinOrganization}
             />
             <TeacherExamRadarChip exam={nearestOfficialExam} />
+
+            <TeacherClassCaieAoChip
+              summary={classCaieAo}
+              branchLabel={classBranchLabel}
+            />
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <OverviewStatCard

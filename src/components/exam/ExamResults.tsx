@@ -27,6 +27,7 @@ import {
 } from '@/components/exam/ExamResultCard';
 import { inferSessionFormat, sessionFormatUiLabel } from '@/lib/exam/exam-session-formats';
 import { CaieAoBreakdownPanel } from '@/components/exam/CaieAoBreakdownPanel';
+import { ExamKarnePrintHost } from '@/components/exam/ExamKarnePrintHost';
 import { GlassCard, fireConfetti, useCountUp } from './ui';
 
 const CAIE_AO_METRIC_KEYS = new Set([
@@ -103,6 +104,7 @@ export function ExamResults({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -22 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+      className="print:hidden"
     >
       {evaluation.is_timed_out ? <ExamResultTimedOutBanner /> : null}
       <GlassCard className="relative overflow-hidden p-8 text-center sm:p-10">
@@ -210,9 +212,15 @@ export function ExamResults({
       </div>
 
       {isCaieSession ? (
-        <div className="mt-6">
-          <CaieAoBreakdownPanel metricBreakdown={evaluation.metricBreakdown} />
-        </div>
+        <>
+          <div className="mt-6">
+            <CaieAoBreakdownPanel
+              variant="screen"
+              metricBreakdown={evaluation.metricBreakdown}
+            />
+          </div>
+          <ExamKarnePrintHost exam={exam} evaluation={evaluation} />
+        </>
       ) : null}
 
       {/* Kırılım */}

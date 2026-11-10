@@ -23,6 +23,7 @@ import {
   shouldRejectObserverTokenCreation,
 } from '../src/lib/observer/observer-token-limits';
 import {
+  aggregateBranchCaieAo,
   aggregateCoordinatorA4CaieAo,
   buildSafeCaieAoDisplayRows,
   parseCaieMetricBreakdownSlice,
@@ -580,6 +581,52 @@ function runGroup8A4CaieAo(): void {
     a4.includes('Cambridge Assessment Objectives (AO) Dağılımı') &&
       a4.includes('report.caieAo') &&
       aoPanel.includes('buildSafeCaieAoDisplayRows'),
+  );
+
+  assert(
+    'a4-caie-print: screen/print varyant CSS sözleşmesi',
+    aoPanel.includes("variant?: 'screen' | 'print'") &&
+      aoPanel.includes('break-inside-avoid') &&
+      aoPanel.includes('border-black') &&
+      aoPanel.includes('data-caie-ao-variant') &&
+      aoPanel.includes('print:hidden') &&
+      aoPanel.includes("variant = 'screen'"),
+  );
+
+  const printHost = readSrc('src/components/exam/ExamKarnePrintHost.tsx');
+  assert(
+    'a4-caie-print: öğrenci karne yazdır host',
+    printHost.includes('ExamKarnePrintHost') &&
+      printHost.includes('variant="print"') &&
+      printHost.includes('Karne yazdır / PDF'),
+  );
+
+  const branchZero = aggregateBranchCaieAo([]);
+  assert(
+    'a4-caie-branch: sıfır deneme → showBlock false, NaN yok',
+    branchZero.showBlock === false &&
+      branchZero.attemptCount === 0 &&
+      branchZero.rows.every((row) => row.pointsDisplay === '—'),
+  );
+
+  const singleSlice = parseCaieMetricBreakdownSlice(
+    buildCaieMetricBreakdown(normalizeCaieBreakdown(5, 3, 2, 10)),
+  );
+  const branchSingle = aggregateBranchCaieAo(singleSlice ? [singleSlice] : []);
+  assert(
+    'a4-caie-branch: tekil deneme → showBlock true ve 3 satır',
+    branchSingle.showBlock === true &&
+      branchSingle.attemptCount === 1 &&
+      branchSingle.rows.length === 3,
+  );
+
+  const teacherChip = readSrc('src/components/teacher/TeacherClassCaieAoChip.tsx');
+  const teacherAo = readSrc('src/lib/b2b/teacher-class-caie-ao.ts');
+  assert(
+    'a4-caie-branch: öğretmen şube AO çipi bağlı',
+    teacherChip.includes('Şube Cambridge AO Ortalaması') &&
+      teacherAo.includes('buildTeacherClassCaieAoSummary') &&
+      teacherAo.includes('aggregateBranchCaieAo'),
   );
 }
 

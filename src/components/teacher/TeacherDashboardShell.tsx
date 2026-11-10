@@ -27,6 +27,7 @@ import type {
 } from '@/lib/b2b/teacher-assignment-actions';
 import type { TeacherAssignmentReviewDetail } from '@/lib/b2b/teacher-assignment-review-types';
 import type { TeacherAssignSubmitResult } from '@/components/teacher/TeacherAssignFromLibraryModal';
+import type { CoordinatorA4CaieAoSummary } from '@/lib/b2b/coordinator-a4-caie-ao';
 
 export interface TeacherDashboardShellProps {
   profileEmail: string;
@@ -143,6 +144,8 @@ export interface TeacherDashboardShellProps {
   };
   panelDataError: string | null;
   nearestOfficialExam: OfficialExamScheduleSummary | null;
+  classCaieAo: CoordinatorA4CaieAoSummary;
+  classBranchLabel: string | null;
 }
 
 function TeacherDashboardShellInner(props: TeacherDashboardShellProps): ReactNode {

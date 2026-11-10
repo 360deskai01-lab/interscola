@@ -214,3 +214,6 @@ export function resolveCambridgeGradeHeadline(
   }
   return '—';
 }
+
+/** Şube / sınıf özeti için kurumsal agregasyonun takma adı. */
+export const aggregateBranchCaieAo = aggregateCoordinatorA4CaieAo;
