@@ -2,6 +2,8 @@
  * Cambridge CAIE A-Level / AS-Level — Assessment Objectives (AO1–AO3) sözleşmesi.
  */
 
+import type { ExamQuestion } from '@/types/exam';
+
 export const CAIE_AO_KEYS = [
   'ao1_knowledge',
   'ao2_application',
@@ -99,6 +101,35 @@ export function validateCaieQuestionRubric(
     hasNonEmptyCriterion(rubric.ao2_application) ||
     hasNonEmptyCriterion(rubric.ao3_evaluation)
   );
+}
+
+const DEFAULT_CAIE_OPEN_RUBRIC: CaieQuestionRubricCriteria = {
+  ao1_knowledge: 'Knowledge and understanding',
+  ao2_application: 'Application',
+  ao3_evaluation: 'Analysis and evaluation',
+};
+
+function isCaieOpenQuestionType(type: ExamQuestion['type']): boolean {
+  return type === 'extended_essay' || type === 'structured_text';
+}
+
+/**
+ * Açık uçlu CAIE sorularında eksik AO rubriğini Cambridge varsayılanlarıyla tamamlar.
+ */
+export function ensureValidCaieQuestionRubric(question: ExamQuestion): ExamQuestion {
+  if (!isCaieOpenQuestionType(question.type)) {
+    return question;
+  }
+  if (validateCaieQuestionRubric(question.rubricCriteria)) {
+    return question;
+  }
+  return {
+    ...question,
+    rubricCriteria: {
+      ...question.rubricCriteria,
+      ...DEFAULT_CAIE_OPEN_RUBRIC,
+    },
+  };
 }
 
 export function formatCaieScaledResult(

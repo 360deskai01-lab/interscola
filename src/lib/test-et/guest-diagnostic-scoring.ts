@@ -6,6 +6,7 @@ import type {
 } from '@/lib/test-et/guest-diagnostic-storage';
 import type { TestEtSlug } from '@/lib/test-et/test-et-config';
 import type { AssessmentPayload, CurriculumCode, ExamQuestion } from '@/types/exam';
+import { calculateCaieGrade } from '@/lib/exam/caie-rubric';
 
 function normalizeMcqAnswer(value: string | undefined): string {
   return (value ?? '').trim().toUpperCase().slice(0, 1);
@@ -30,15 +31,6 @@ function estimateIeltsBand(words: number, hasStructure: boolean): number {
   if (words >= 320) band = 7.5;
   if (hasStructure && words >= 200) band += 0.5;
   return Math.min(8.5, Math.round(band * 2) / 2);
-}
-
-function caieGradeFromPoints(earned: number, max: number): string {
-  const ratio = max > 0 ? earned / max : 0;
-  if (ratio >= 0.85) return 'Grade A*';
-  if (ratio >= 0.72) return 'Grade A';
-  if (ratio >= 0.58) return 'Grade B';
-  if (ratio >= 0.45) return 'Grade C';
-  return 'Grade D';
 }
 
 function buildQuestionBreakdown(
@@ -172,7 +164,7 @@ export function scoreGuestDiagnostic(params: {
         else if (words >= 15) earned += Math.round(question.targetMarks * 0.35);
       }
     }
-    headlineScore = caieGradeFromPoints(earned, max);
+    headlineScore = `Grade ${calculateCaieGrade(earned, max)}`;
     summary =
       'AO1/AO2/AO3 dağılımınız hesaplandı — eksik kazanım raporu hesabınızda.';
   }

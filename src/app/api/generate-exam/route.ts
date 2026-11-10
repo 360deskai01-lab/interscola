@@ -7,6 +7,7 @@ import type {
   EngineType,
   ExamQuestion,
 } from '@/types/exam';
+import { ensureValidCaieQuestionRubric } from '@/lib/exam/caie-rubric';
 
 export const maxDuration = 60;
 
@@ -679,9 +680,12 @@ function normalizePayload(
     throw new ModelOutputError('Model yanıtında hiç soru üretilmedi.');
   }
 
-  const questions = raw.questions.map((question, index) =>
+  let questions = raw.questions.map((question, index) =>
     normalizeQuestion(question, index, input.engineType),
   );
+  if (input.curriculum === 'CAIE') {
+    questions = questions.map(ensureValidCaieQuestionRubric);
+  }
 
   if (questions.length !== input.questionCount) {
     throw new QuestionCountMismatchError(

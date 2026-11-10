@@ -24,6 +24,7 @@ import {
 } from '../src/lib/observer/observer-token-limits';
 import {
   calculateCaieGrade,
+  ensureValidCaieQuestionRubric,
   normalizeCaieBreakdown,
   validateCaieQuestionRubric,
 } from '../src/lib/exam/caie-rubric';
@@ -436,6 +437,49 @@ function runGroup7CaieRubric(): void {
     !validateCaieQuestionRubric({}) &&
       !validateCaieQuestionRubric(null) &&
       !validateCaieQuestionRubric({ ao1_knowledge: '   ' }),
+  );
+
+  const shielded = ensureValidCaieQuestionRubric({
+    id: 'q1',
+    questionNumber: 1,
+    prompt: 'Explain Andrade (2009).',
+    type: 'extended_essay',
+    targetMarks: 20,
+  });
+  assert(
+    'caie-shield: ensureValidCaieQuestionRubric eksik rubriği tamamlar',
+    validateCaieQuestionRubric(shielded.rubricCriteria) &&
+      Boolean(shielded.rubricCriteria?.ao1_knowledge?.includes('Knowledge')),
+  );
+
+  const guestScoringSrc = readSrc('src/lib/test-et/guest-diagnostic-scoring.ts');
+  assert(
+    'caie-guest: guest-diagnostic-scoring calculateCaieGrade kullanır',
+    guestScoringSrc.includes("from '@/lib/exam/caie-rubric'") &&
+      guestScoringSrc.includes('calculateCaieGrade') &&
+      !guestScoringSrc.includes('caieGradeFromPoints'),
+  );
+
+  const zeroBreakdown = normalizeCaieBreakdown(0, 0, 0, 0);
+  assert(
+    'caie-breakdown: sıfır puan NaN üretmez',
+    [zeroBreakdown.totalScore, zeroBreakdown.percent, zeroBreakdown.ao1Percent].every(
+      (value) => Number.isFinite(value),
+    ) && zeroBreakdown.cambridge_grade === 'U',
+  );
+
+  const maxBreakdown = normalizeCaieBreakdown(45, 30, 25, 100);
+  assert(
+    'caie-breakdown: maksimum puan NaN üretmez',
+    [maxBreakdown.totalScore, maxBreakdown.percent, maxBreakdown.ao3Percent].every(
+      (value) => Number.isFinite(value),
+    ) && maxBreakdown.cambridge_grade === 'A*',
+  );
+
+  const assessmentPayload = readSrc('src/lib/assessment-payload.ts');
+  assert(
+    'caie-shield: parseAssessmentPayload CAIE rubrik kalkanı',
+    assessmentPayload.includes('ensureValidCaieQuestionRubric'),
   );
 }
 

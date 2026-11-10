@@ -8,6 +8,7 @@ import {
   inferSessionFormat,
   minimumDurationMinutesForSession,
 } from '@/lib/exam/exam-session-formats';
+import { ensureValidCaieQuestionRubric } from '@/lib/exam/caie-rubric';
 
 const CURRICULA = new Set<CurriculumCode>(['IELTS', 'CAIE', 'SAT']);
 const ENGINE_TYPES = new Set<EngineType>([
@@ -96,6 +97,12 @@ export function parseAssessmentPayload(raw: unknown): AssessmentPayload {
       ? raw.totalMarks
       : raw.questions.length;
 
+  const rawQuestions = raw.questions as ExamQuestion[];
+  const questions =
+    curriculum === 'CAIE'
+      ? rawQuestions.map(ensureValidCaieQuestionRubric)
+      : rawQuestions;
+
   return {
     curriculum: curriculum as CurriculumCode,
     engineType: engineType as EngineType,
@@ -103,7 +110,7 @@ export function parseAssessmentPayload(raw: unknown): AssessmentPayload {
     title,
     durationMinutes,
     totalMarks,
-    questions: raw.questions as AssessmentPayload['questions'],
+    questions,
   };
 }
 

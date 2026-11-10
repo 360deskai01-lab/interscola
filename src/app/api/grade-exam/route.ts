@@ -11,6 +11,7 @@ import { evaluationForUnansweredExam } from '@/lib/exam/unanswered-exam-evaluati
 import {
   buildCaieMetricBreakdown,
   calculateCaieGrade,
+  ensureValidCaieQuestionRubric,
   formatCaieScaledResult,
   normalizeCaieBreakdown,
 } from '@/lib/exam/caie-rubric';
@@ -338,7 +339,10 @@ function parseExam(raw: unknown): AssessmentPayload {
     );
   }
 
-  const questions = raw.questions.map(parseQuestion);
+  let questions = raw.questions.map(parseQuestion);
+  if (curriculum === 'CAIE') {
+    questions = questions.map(ensureValidCaieQuestionRubric);
+  }
   const ids = new Set<string>();
   for (const question of questions) {
     if (ids.has(question.id)) {
